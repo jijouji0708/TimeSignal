@@ -23,15 +23,42 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AE737C652D1E735B00922E24 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		AE737C182D1D7C5A00922E24 /* TimeSignal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TimeSignal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE737C282D1D7C5B00922E24 /* TimeSignalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TimeSignalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE737C322D1D7C5B00922E24 /* TimeSignalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TimeSignalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE737C6C2D1E7F7500922E24 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AE737C592D1D8DA000922E24 /* Exceptions for "TimeSignal" folder in "TimeSignal" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AE737C172D1D7C5A00922E24 /* TimeSignal */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AE737C1A2D1D7C5A00922E24 /* TimeSignal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AE737C592D1D8DA000922E24 /* Exceptions for "TimeSignal" folder in "TimeSignal" target */,
+			);
 			path = TimeSignal;
 			sourceTree = "<group>";
 		};
@@ -78,6 +105,7 @@
 				AE737C1A2D1D7C5A00922E24 /* TimeSignal */,
 				AE737C2B2D1D7C5B00922E24 /* TimeSignalTests */,
 				AE737C352D1D7C5B00922E24 /* TimeSignalUITests */,
+				AE737C6B2D1E7F7500922E24 /* Frameworks */,
 				AE737C192D1D7C5A00922E24 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -92,6 +120,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		AE737C6B2D1E7F7500922E24 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				AE737C6C2D1E7F7500922E24 /* UserNotifications.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -102,6 +138,7 @@
 				AE737C142D1D7C5A00922E24 /* Sources */,
 				AE737C152D1D7C5A00922E24 /* Frameworks */,
 				AE737C162D1D7C5A00922E24 /* Resources */,
+				AE737C652D1E735B00922E24 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -393,12 +430,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"TimeSignal/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = WLU3DRHKX7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/TimeSignal/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -422,12 +461,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"TimeSignal/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = WLU3DRHKX7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "$(SRCROOT)/TimeSignal/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
