@@ -5,26 +5,29 @@
 //  Created by 高村直也 on 2024/12/26.
 //
 
-// Views/ContentView.swift
 import SwiftUI
 import UserNotifications
 import UIKit
 
 struct ContentView: View {
     @State private var isOn = false
+    @State private var selectedMinutes: Set<Int> = []
     let impactMed = UIImpactFeedbackGenerator(style: .medium)
-
+    
+    // 通知を設定する時間のリスト
+    let availableMinutes = [0, 10, 15, 20, 30, 40, 45, 50]
+    
     var body: some View {
         VStack {
             Spacer()
             
-            // カスタムボタン
+            // メインの時報切り替えボタン
             Button(action: {
                 withAnimation {
                     isOn.toggle()
                     impactMed.impactOccurred()
                     if isOn {
-                        scheduleQuarterHourNotifications()
+                        scheduleNotifications()
                     } else {
                         removeAllNotifications()
                     }
@@ -61,43 +64,85 @@ struct ContentView: View {
             .accessibility(addTraits: .isButton)
             .padding()
             
+            // トグルセクションのラベル
+            Text("通知する分を選択")
+                .font(.headline)
+                .padding(.top, 10)
+            
+            // 各時間のトグルスイッチを常に表示
+            List {
+                ForEach(availableMinutes, id: \.self) { minute in
+                    Toggle(isOn: Binding(
+                        get: {
+                            selectedMinutes.contains(minute)
+                        },
+                        set: { newValue in
+                            if newValue {
+                                selectedMinutes.insert(minute)
+                            } else {
+                                selectedMinutes.remove(minute)
+                            }
+                            // 通知を再スケジュール
+                            scheduleNotifications()
+                        }
+                    )) {
+                        Text(String(format: "%02d分", minute))
+                    }
+                    .disabled(!isOn) // isOnがfalseのときトグルを無効化
+                    .opacity(isOn ? 1.0 : 0.5) // isOnがfalseのときトグルの透明度を下げる
+                }
+            }
+            .listStyle(InsetGroupedListStyle())
+            .disabled(!isOn) // List全体を無効化
+            .opacity(isOn ? 1.0 : 0.5) // List全体の透明度を調整
+            .padding()
+            
             Spacer()
         }
         .padding()
+        .onAppear {
+            // 初回起動時に通知の許可をリクエスト
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+                if granted {
+                    print("通知の許可が得られました。")
+                } else {
+                    print("通知の許可が得られませんでした。")
+                }
+            }
+        }
     }
-
-    // 15, 30, 45, 00分に通知をスケジュール
-    func scheduleQuarterHourNotifications() {
+    
+    // 通知をスケジュールする関数
+    func scheduleNotifications() {
         let center = UNUserNotificationCenter.current()
         removeAllNotifications() // 重複を避けるため既存の通知を削除
-
-        let minutesArray = [15, 30, 45, 0]
-        let calendar = Calendar.current
-
-        for minute in minutesArray {
+        
+        guard isOn else { return }
+        
+        for minute in selectedMinutes {
             var dateComponents = DateComponents()
             dateComponents.minute = minute
             dateComponents.second = 0
-
+            
             // 次の指定分の時刻を計算
-            guard let triggerDate = calendar.nextDate(after: Date(), matching: dateComponents, matchingPolicy: .nextTime) else {
+            guard let triggerDate = Calendar.current.nextDate(after: Date(), matching: dateComponents, matchingPolicy: .nextTime) else {
                 continue
             }
-
+            
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm"
             let scheduledTime = formatter.string(from: triggerDate)
-
-            let trigger = UNCalendarNotificationTrigger(dateMatching: calendar.dateComponents([.hour, .minute, .second], from: triggerDate), repeats: true)
-
+            
+            let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.hour, .minute, .second], from: triggerDate), repeats: true)
+            
             let content = UNMutableNotificationContent()
             content.title = "時報"
             content.body = "\(scheduledTime)になりました。"
             content.sound = UNNotificationSound.default
-
-            let identifier = "QuarterHourNotification_\(minute)"
+            
+            let identifier = "TimeSignalNotification_\(minute)"
             let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-
+            
             center.add(request) { error in
                 if let error = error {
                     print("通知の追加に失敗しました: \(error.localizedDescription)")
@@ -106,11 +151,11 @@ struct ContentView: View {
                 }
             }
         }
-
-        print("時報通知をスケジュールしました。")
+        
+        print("選択された時報通知をスケジュールしました。")
     }
-
-    // すべての通知を削除
+    
+    // すべての通知を削除する関数
     func removeAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         print("すべての時報通知を削除しました。")
