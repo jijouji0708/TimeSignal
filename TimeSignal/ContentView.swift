@@ -10,8 +10,15 @@ import UserNotifications
 import UIKit
 
 struct ContentView: View {
-    @State private var isOn = false
+    // @AppStorage を使用して isOn を永続化
+    @AppStorage("isOn") private var isOn: Bool = false
+    
+    // selectedMinutes を UserDefaults に保存するためのキー
+    private let selectedMinutesKey = "selectedMinutes"
+    
+    // selectedMinutes を保持するための状態
     @State private var selectedMinutes: Set<Int> = []
+    
     let impactMed = UIImpactFeedbackGenerator(style: .medium)
     
     // 通知を設定する時間のリスト
@@ -31,6 +38,8 @@ struct ContentView: View {
                     } else {
                         removeAllNotifications()
                     }
+                    // isOn が変わったので保存
+                    saveIsOn()
                 }
             }) {
                 // ボタンのデザイン
@@ -84,6 +93,8 @@ struct ContentView: View {
                             }
                             // 通知を再スケジュール
                             scheduleNotifications()
+                            // selectedMinutes が変わったので保存
+                            saveSelectedMinutes()
                         }
                     )) {
                         Text(String(format: "%02d分", minute))
@@ -101,6 +112,11 @@ struct ContentView: View {
         }
         .padding()
         .onAppear {
+            loadSettings()
+            if isOn {
+                scheduleNotifications()
+            }
+            
             // 初回起動時に通知の許可をリクエスト
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
                 if granted {
@@ -159,6 +175,25 @@ struct ContentView: View {
     func removeAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         print("すべての時報通知を削除しました。")
+    }
+    
+    // 設定を保存する関数
+    func saveIsOn() {
+        UserDefaults.standard.set(isOn, forKey: "isOn")
+    }
+    
+    func saveSelectedMinutes() {
+        let minutesArray = Array(selectedMinutes)
+        UserDefaults.standard.set(minutesArray, forKey: selectedMinutesKey)
+    }
+    
+    // 設定を読み込む関数
+    func loadSettings() {
+        // isOn は @AppStorage で自動的に読み込まれる
+        
+        if let minutesArray = UserDefaults.standard.array(forKey: selectedMinutesKey) as? [Int] {
+            selectedMinutes = Set(minutesArray)
+        }
     }
 }
 

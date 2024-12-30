@@ -37,19 +37,19 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AE737C182D1D7C5A00922E24 /* TimeSignal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TimeSignal.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		AE737C282D1D7C5B00922E24 /* TimeSignalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TimeSignalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		AE737C322D1D7C5B00922E24 /* TimeSignalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TimeSignalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE737C182D1D7C5A00922E24 /* シンプル時報.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "シンプル時報.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE737C282D1D7C5B00922E24 /* シンプル時報Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "シンプル時報Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE737C322D1D7C5B00922E24 /* シンプル時報UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "シンプル時報UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE737C6C2D1E7F7500922E24 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		AE737C592D1D8DA000922E24 /* Exceptions for "TimeSignal" folder in "TimeSignal" target */ = {
+		AE737C592D1D8DA000922E24 /* Exceptions for "TimeSignal" folder in "シンプル時報" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = AE737C172D1D7C5A00922E24 /* TimeSignal */;
+			target = AE737C172D1D7C5A00922E24 /* シンプル時報 */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -57,7 +57,7 @@
 		AE737C1A2D1D7C5A00922E24 /* TimeSignal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				AE737C592D1D8DA000922E24 /* Exceptions for "TimeSignal" folder in "TimeSignal" target */,
+				AE737C592D1D8DA000922E24 /* Exceptions for "TimeSignal" folder in "シンプル時報" target */,
 			);
 			path = TimeSignal;
 			sourceTree = "<group>";
@@ -113,9 +113,9 @@
 		AE737C192D1D7C5A00922E24 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AE737C182D1D7C5A00922E24 /* TimeSignal.app */,
-				AE737C282D1D7C5B00922E24 /* TimeSignalTests.xctest */,
-				AE737C322D1D7C5B00922E24 /* TimeSignalUITests.xctest */,
+				AE737C182D1D7C5A00922E24 /* シンプル時報.app */,
+				AE737C282D1D7C5B00922E24 /* シンプル時報Tests.xctest */,
+				AE737C322D1D7C5B00922E24 /* シンプル時報UITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -131,9 +131,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AE737C172D1D7C5A00922E24 /* TimeSignal */ = {
+		AE737C172D1D7C5A00922E24 /* シンプル時報 */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AE737C3C2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "TimeSignal" */;
+			buildConfigurationList = AE737C3C2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "シンプル時報" */;
 			buildPhases = (
 				AE737C142D1D7C5A00922E24 /* Sources */,
 				AE737C152D1D7C5A00922E24 /* Frameworks */,
@@ -147,16 +147,16 @@
 			fileSystemSynchronizedGroups = (
 				AE737C1A2D1D7C5A00922E24 /* TimeSignal */,
 			);
-			name = TimeSignal;
+			name = "シンプル時報";
 			packageProductDependencies = (
 			);
 			productName = TimeSignal;
-			productReference = AE737C182D1D7C5A00922E24 /* TimeSignal.app */;
+			productReference = AE737C182D1D7C5A00922E24 /* シンプル時報.app */;
 			productType = "com.apple.product-type.application";
 		};
-		AE737C272D1D7C5B00922E24 /* TimeSignalTests */ = {
+		AE737C272D1D7C5B00922E24 /* シンプル時報Tests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AE737C3F2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "TimeSignalTests" */;
+			buildConfigurationList = AE737C3F2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "シンプル時報Tests" */;
 			buildPhases = (
 				AE737C242D1D7C5B00922E24 /* Sources */,
 				AE737C252D1D7C5B00922E24 /* Frameworks */,
@@ -170,16 +170,16 @@
 			fileSystemSynchronizedGroups = (
 				AE737C2B2D1D7C5B00922E24 /* TimeSignalTests */,
 			);
-			name = TimeSignalTests;
+			name = "シンプル時報Tests";
 			packageProductDependencies = (
 			);
 			productName = TimeSignalTests;
-			productReference = AE737C282D1D7C5B00922E24 /* TimeSignalTests.xctest */;
+			productReference = AE737C282D1D7C5B00922E24 /* シンプル時報Tests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		AE737C312D1D7C5B00922E24 /* TimeSignalUITests */ = {
+		AE737C312D1D7C5B00922E24 /* シンプル時報UITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AE737C422D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "TimeSignalUITests" */;
+			buildConfigurationList = AE737C422D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "シンプル時報UITests" */;
 			buildPhases = (
 				AE737C2E2D1D7C5B00922E24 /* Sources */,
 				AE737C2F2D1D7C5B00922E24 /* Frameworks */,
@@ -193,11 +193,11 @@
 			fileSystemSynchronizedGroups = (
 				AE737C352D1D7C5B00922E24 /* TimeSignalUITests */,
 			);
-			name = TimeSignalUITests;
+			name = "シンプル時報UITests";
 			packageProductDependencies = (
 			);
 			productName = TimeSignalUITests;
-			productReference = AE737C322D1D7C5B00922E24 /* TimeSignalUITests.xctest */;
+			productReference = AE737C322D1D7C5B00922E24 /* シンプル時報UITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -223,7 +223,7 @@
 					};
 				};
 			};
-			buildConfigurationList = AE737C132D1D7C5A00922E24 /* Build configuration list for PBXProject "TimeSignal" */;
+			buildConfigurationList = AE737C132D1D7C5A00922E24 /* Build configuration list for PBXProject "シンプル時報" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -237,9 +237,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AE737C172D1D7C5A00922E24 /* TimeSignal */,
-				AE737C272D1D7C5B00922E24 /* TimeSignalTests */,
-				AE737C312D1D7C5B00922E24 /* TimeSignalUITests */,
+				AE737C172D1D7C5A00922E24 /* シンプル時報 */,
+				AE737C272D1D7C5B00922E24 /* シンプル時報Tests */,
+				AE737C312D1D7C5B00922E24 /* シンプル時報UITests */,
 			);
 		};
 /* End PBXProject section */
@@ -295,12 +295,12 @@
 /* Begin PBXTargetDependency section */
 		AE737C2A2D1D7C5B00922E24 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = AE737C172D1D7C5A00922E24 /* TimeSignal */;
+			target = AE737C172D1D7C5A00922E24 /* シンプル時報 */;
 			targetProxy = AE737C292D1D7C5B00922E24 /* PBXContainerItemProxy */;
 		};
 		AE737C342D1D7C5B00922E24 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = AE737C172D1D7C5A00922E24 /* TimeSignal */;
+			target = AE737C172D1D7C5A00922E24 /* シンプル時報 */;
 			targetProxy = AE737C332D1D7C5B00922E24 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -438,6 +438,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(SRCROOT)/TimeSignal/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "シンプル時報";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -469,6 +470,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(SRCROOT)/TimeSignal/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "シンプル時報";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -502,7 +504,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TimeSignal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TimeSignal";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/シンプル時報.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/シンプル時報";
 			};
 			name = Debug;
 		};
@@ -521,7 +523,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TimeSignal.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TimeSignal";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/シンプル時報.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/シンプル時報";
 			};
 			name = Release;
 		};
@@ -562,7 +564,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AE737C132D1D7C5A00922E24 /* Build configuration list for PBXProject "TimeSignal" */ = {
+		AE737C132D1D7C5A00922E24 /* Build configuration list for PBXProject "シンプル時報" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AE737C3A2D1D7C5B00922E24 /* Debug */,
@@ -571,7 +573,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AE737C3C2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "TimeSignal" */ = {
+		AE737C3C2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "シンプル時報" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AE737C3D2D1D7C5B00922E24 /* Debug */,
@@ -580,7 +582,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AE737C3F2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "TimeSignalTests" */ = {
+		AE737C3F2D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "シンプル時報Tests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AE737C402D1D7C5B00922E24 /* Debug */,
@@ -589,7 +591,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AE737C422D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "TimeSignalUITests" */ = {
+		AE737C422D1D7C5B00922E24 /* Build configuration list for PBXNativeTarget "シンプル時報UITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AE737C432D1D7C5B00922E24 /* Debug */,
