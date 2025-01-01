@@ -24,6 +24,13 @@ struct ContentView: View {
     // 通知を設定する時間のリスト
     let availableMinutes = [0, 10, 15, 20, 30, 40, 45, 50]
     
+    // 一括選択ボタン用のカテゴリ
+    private let bulkCategories: [BulkCategory] = [
+        BulkCategory(name: "10分ごと", minutes: [0, 10, 20, 30, 40, 50]),
+        BulkCategory(name: "15分ごと", minutes: [0, 15, 30, 45]),
+        BulkCategory(name: "30分ごと", minutes: [0, 30])
+    ]
+    
     var body: some View {
         VStack {
             Spacer()
@@ -73,6 +80,26 @@ struct ContentView: View {
             .accessibility(addTraits: .isButton)
             .padding()
             
+            // 一括選択ボタンの追加
+            HStack(spacing: 10) {
+                ForEach(bulkCategories) { category in
+                    Button(action: {
+                        toggleBulkSelection(for: category.minutes)
+                    }) {
+                        Text(category.name)
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(Color.green)
+                            .cornerRadius(15)
+                    }
+                    .disabled(!isOn)
+                    .opacity(isOn ? 1.0 : 0.5)
+                }
+            }
+            .padding(.top, 10)
+            
             // トグルセクションのラベル
             Text("通知する分を選択")
                 .font(.headline)
@@ -117,7 +144,8 @@ struct ContentView: View {
                 scheduleNotifications()
             }
             
-            // 初回起動時に通知の許可をリクエスト
+            #if !DEBUG
+            // 初回起動時に通知の許可をリクエスト（プレビューでは実行しない）
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
                 if granted {
                     print("通知の許可が得られました。")
@@ -125,7 +153,31 @@ struct ContentView: View {
                     print("通知の許可が得られませんでした。")
                 }
             }
+            #endif
         }
+    }
+    
+    // 一括選択ボタン用のカテゴリ構造体
+    struct BulkCategory: Identifiable {
+        let id = UUID()
+        let name: String
+        let minutes: [Int]
+    }
+    
+    // 一括選択のトグル機能
+    private func toggleBulkSelection(for minutes: [Int]) {
+        let allSelected = minutes.allSatisfy { selectedMinutes.contains($0) }
+        if allSelected {
+            // すべて選択されている場合、解除
+            selectedMinutes.subtract(minutes)
+        } else {
+            // 一部でも選択されていない場合、選択
+            selectedMinutes.formUnion(minutes)
+        }
+        // 通知を再スケジュール
+        scheduleNotifications()
+        // selectedMinutes が変わったので保存
+        saveSelectedMinutes()
     }
     
     // 通知をスケジュールする関数
