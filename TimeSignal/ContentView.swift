@@ -3,6 +3,7 @@
 //  TimeSignal
 //
 //  Created by 高村直也 on 2024/12/26.
+//  修正版: UNCalendarNotificationTrigger の設定を修正し、毎時間繰り返し通知が動作するよう改善
 //
 
 import SwiftUI
@@ -49,7 +50,6 @@ struct ContentView: View {
                     saveIsOn()
                 }
             }) {
-                // ボタンのデザイン
                 VStack {
                     Image(systemName: isOn ? "bell.fill" : "bell.slash.fill")
                         .resizable()
@@ -118,21 +118,19 @@ struct ContentView: View {
                             } else {
                                 selectedMinutes.remove(minute)
                             }
-                            // 通知を再スケジュール
                             scheduleNotifications()
-                            // selectedMinutes が変わったので保存
                             saveSelectedMinutes()
                         }
                     )) {
                         Text(String(format: "%02d分", minute))
                     }
-                    .disabled(!isOn) // isOnがfalseのときトグルを無効化
-                    .opacity(isOn ? 1.0 : 0.5) // isOnがfalseのときトグルの透明度を下げる
+                    .disabled(!isOn)
+                    .opacity(isOn ? 1.0 : 0.5)
                 }
             }
             .listStyle(InsetGroupedListStyle())
-            .disabled(!isOn) // List全体を無効化
-            .opacity(isOn ? 1.0 : 0.5) // List全体の透明度を調整
+            .disabled(!isOn)
+            .opacity(isOn ? 1.0 : 0.5)
             .padding()
             
             Spacer()
@@ -143,9 +141,7 @@ struct ContentView: View {
             if isOn {
                 scheduleNotifications()
             }
-            
             #if !DEBUG
-            // 初回起動時に通知の許可をリクエスト（プレビューでは実行しない）
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
                 if granted {
                     print("通知の許可が得られました。")
@@ -168,58 +164,43 @@ struct ContentView: View {
     private func toggleBulkSelection(for minutes: [Int]) {
         let allSelected = minutes.allSatisfy { selectedMinutes.contains($0) }
         if allSelected {
-            // すべて選択されている場合、解除
             selectedMinutes.subtract(minutes)
         } else {
-            // 一部でも選択されていない場合、選択
             selectedMinutes.formUnion(minutes)
         }
-        // 通知を再スケジュール
         scheduleNotifications()
-        // selectedMinutes が変わったので保存
         saveSelectedMinutes()
     }
     
     // 通知をスケジュールする関数
     func scheduleNotifications() {
         let center = UNUserNotificationCenter.current()
-        removeAllNotifications() // 重複を避けるため既存の通知を削除
-        
+        removeAllNotifications()
         guard isOn else { return }
-        
+
         for minute in selectedMinutes {
-            var dateComponents = DateComponents()
-            dateComponents.minute = minute
-            dateComponents.second = 0
-            
-            // 次の指定分の時刻を計算
-            guard let triggerDate = Calendar.current.nextDate(after: Date(), matching: dateComponents, matchingPolicy: .nextTime) else {
-                continue
-            }
-            
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            let scheduledTime = formatter.string(from: triggerDate)
-            
-            let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.hour, .minute, .second], from: triggerDate), repeats: true)
-            
-            let content = UNMutableNotificationContent()
-            content.title = "時報"
-            content.body = "\(scheduledTime)になりました。"
-            content.sound = UNNotificationSound.default
-            
-            let identifier = "TimeSignalNotification_\(minute)"
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-            
-            center.add(request) { error in
-                if let error = error {
-                    print("通知の追加に失敗しました: \(error.localizedDescription)")
-                } else {
-                    print("通知が追加されました: \(identifier)")
+            for hour in 0..<24 {
+                var components = DateComponents()
+                components.hour = hour
+                components.minute = minute
+                components.second = 0
+
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+
+                let content = UNMutableNotificationContent()
+                content.title = "時報"
+                content.body = String(format: "%02d時%02d分になりました。", hour, minute)
+                content.sound = .default
+
+                let identifier = "TimeSignalNotification_\(hour)_\(minute)"
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                center.add(request) { error in
+                    if let error = error {
+                        print("通知の追加に失敗しました: \(error.localizedDescription)")
+                    }
                 }
             }
         }
-        
         print("選択された時報通知をスケジュールしました。")
     }
     
@@ -241,8 +222,6 @@ struct ContentView: View {
     
     // 設定を読み込む関数
     func loadSettings() {
-        // isOn は @AppStorage で自動的に読み込まれる
-        
         if let minutesArray = UserDefaults.standard.array(forKey: selectedMinutesKey) as? [Int] {
             selectedMinutes = Set(minutesArray)
         }
