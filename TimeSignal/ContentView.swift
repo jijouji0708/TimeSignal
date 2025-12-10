@@ -7,6 +7,8 @@ struct ContentView: View {
     // 状態保存
     @AppStorage("isOn") private var isOn: Bool = false
     @AppStorage("selectedSoundName") private var selectedSoundName: String = "デフォルト"
+    @AppStorage("languageCode") private var languageCode: String = "ja"
+    @AppStorage("selectedColorName") private var selectedColorName: String = "Cyan"
     private let selectedMinutesKey = "selectedMinutes"
 
     // UI状態
@@ -35,124 +37,346 @@ struct ContentView: View {
         .init(name: "ピッピッピッポーン", fileName: "pippippippon.caf")
     ]
 
-    var body: some View {
-        VStack {
-            Spacer()
+    // グラデーションアニメーション用
+    @State private var gradientStart = UnitPoint(x: 0, y: -2)
+    @State private var gradientEnd = UnitPoint(x: 4, y: 0)
 
-            // メインの時報トグル
-            Button {
-                withAnimation {
-                    isOn.toggle()
-                    impactMed.impactOccurred()
-                }
-                if isOn {
-                    scheduleNotifications()
-                } else {
-                    removeTimeSignalNotifications()
-                }
-            } label: {
-                VStack {
-                    Image(systemName: isOn ? "bell.fill" : "bell.slash.fill")
-                        .resizable().scaledToFit().frame(width: 50, height: 50)
-                        .foregroundColor(.white)
-                        .scaleEffect(isOn ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 0.5), value: isOn)
-                    Text(isOn ? "時報オン" : "時報オフ")
-                        .font(.headline).foregroundColor(.white)
-                        .opacity(isOn ? 1.0 : 0.7)
-                        .animation(.easeInOut(duration: 0.5), value: isOn)
-                }
-                .padding()
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: isOn ? [Color.green.opacity(0.8), .green] : [Color.gray.opacity(0.8), .gray]),
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
-                )
-                .cornerRadius(25)
-                .shadow(color: isOn ? .green.opacity(0.8) : .gray.opacity(0.6), radius: 15, x: 5, y: 5)
-            }
-            .accessibilityLabel(isOn ? "時報をオフにする" : "時報をオンにする")
-            .padding()
-
-            // 一括選択
-            HStack(spacing: 10) {
-                ForEach(bulkCategories) { category in
-                    Button {
-                        toggleBulkSelection(for: category.minutes)
-                    } label: {
-                        Text(category.name)
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                            .padding(.vertical, 8).padding(.horizontal, 12)
-                            .background(Color.green).cornerRadius(15)
-                    }
-                    .disabled(!isOn)
-                    .opacity(isOn ? 1.0 : 0.5)
-                }
-            }
-            .padding(.top, 10)
-
-            // 設定リスト（サウンドは常時操作可、分選択はオン時のみ）
-            List {
-                Section(header: Text("サウンド")) {
-                    Picker("サウンド", selection: $selectedSoundName) {
-                        ForEach(soundOptions, id: \.self) { opt in
-                            Text(opt.name).tag(opt.name)
-                        }
-                    }
-                    .onChange(of: selectedSoundName) { _ in
-                        // 以後の通知に反映（現在の予約を時報だけ再構築）
-                        _ = validateCurrentSoundAvailability()
-                        scheduleNotificationsDebounced()
-                    }
-
-                    Button {
-                        playSoundPreview()
-                    } label: {
-                        Label("サウンドをテスト再生", systemImage: "speaker.wave.2.fill")
-                    }
-                    .buttonStyle(BorderlessButtonStyle())
-                }
-
-                Section(header: Text("通知する分を選択")) {
-                    ForEach(availableMinutes, id: \.self) { minute in
-                        Toggle(isOn: Binding(
-                            get: { selectedMinutes.contains(minute) },
-                            set: { newValue in
-                                if newValue { selectedMinutes.insert(minute) } else { selectedMinutes.remove(minute) }
-                                saveSelectedMinutes()
-                                scheduleNotificationsDebounced()
-                            }
-                        )) {
-                            Text(String(format: "%02d分", minute))
-                        }
-                        .disabled(!isOn)
-                        .opacity(isOn ? 1.0 : 0.5)
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .padding()
-
-            Spacer()
+    // カラーパレット
+    private var accentColor: Color {
+        switch selectedColorName {
+        case "Mint": return .mint
+        case "Indigo": return .indigo
+        case "Pink": return .pink
+        case "Orange": return .orange
+        case "Green": return .green
+        default: return .cyan
         }
-        .padding()
+    }
+
+    // 簡易ローカライゼーション辞書
+    private func t(_ key: String) -> String {
+        let isJa = (languageCode == "ja")
+        switch key {
+        case "Active": return isJa ? "有効" : "Active"
+        case "Inactive": return isJa ? "無効" : "Inactive"
+        case "Quick Select": return isJa ? "一括選択" : "Quick Select"
+        case "Clear All": return isJa ? "全解除" : "Clear All"
+        case "Sound": return isJa ? "通知音" : "Sound"
+        case "Minutes": return isJa ? "通知する分" : "Minutes"
+        case "Settings": return isJa ? "設定" : "Settings"
+        case "Appearance": return isJa ? "外観" : "Appearance"
+        case "Language": return isJa ? "言語" : "Language"
+        case "Theme Color": return isJa ? "テーマカラー" : "Theme Color"
+        case "Preview": return isJa ? "試聴" : "Preview"
+        case "Sound Off Alert Title": return isJa ? "サウンドが無効" : "Sound Disabled"
+        case "Sound Off Alert Msg": return isJa ? "設定 > 通知 > このアプリ > サウンド をオンにすると通知音が鳴ります。" : "Please enable Sound in Settings > Notifications > This App."
+        case "Missing File Alert Title": return isJa ? "ファイル不明" : "File Missing"
+        case "Missing File Alert Msg": return isJa ? "音声ファイルが見つかりません: " : "Audio file not found: "
+        case "Open Settings": return isJa ? "設定を開く" : "Open Settings"
+        case "OK": return "OK"
+        default: return key
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            backgroundView
+            mainContentView
+        }
         .onAppear {
             loadSettings()
-            // 起動時にオンであれば再構築（許可とサウンド設定を踏まえて安全に実行）
             if isOn { scheduleNotifications() }
         }
-        .alert("サウンドがオフです", isPresented: $showSoundOffAlert) {
-            Button("設定を開く") { openSettings() }
-            Button("OK", role: .cancel) { }
+        .alert(t("Sound Off Alert Title"), isPresented: $showSoundOffAlert) {
+            Button(t("Open Settings")) { openSettings() }
+            Button(t("OK"), role: .cancel) { }
         } message: {
-            Text("設定 > 通知 > このアプリ > サウンド をオンにすると通知音が鳴ります。現在も予約は継続されます。")
+            Text(t("Sound Off Alert Msg"))
         }
-        .alert("サウンドファイルが見つかりません", isPresented: $showSoundMissingAlert) {
-            Button("OK") { }
+        .alert(t("Missing File Alert Title"), isPresented: $showSoundMissingAlert) {
+            Button(t("OK")) { }
         } message: {
-            Text("\(missingSoundName) の音声ファイルがバンドルにありません。デフォルト音で再生されます。\nファイル名と Copy Bundle Resources を確認してください。")
+            Text(t("Missing File Alert Msg") + "\(missingSoundName)")
+        }
+    }
+
+    private var backgroundView: some View {
+        LinearGradient(gradient: Gradient(colors: [
+            Color(red: 0.1, green: 0.2, blue: 0.45),
+            Color(red: 0.0, green: 0.0, blue: 0.1),
+            Color(red: 0.2, green: 0.1, blue: 0.3)
+        ]), startPoint: gradientStart, endPoint: gradientEnd)
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
+                gradientStart = UnitPoint(x: 1, y: 1)
+                gradientEnd = UnitPoint(x: 0, y: 0)
+            }
+        }
+    }
+
+    private var mainContentView: some View {
+        ScrollView {
+            VStack(spacing: 30) {
+                headerView
+                timeSignalToggleView
+                statusView
+                quickSelectView
+                settingsView
+                appearanceView
+            }
+        }
+    }
+
+    private var headerView: some View {
+        Text("Time Signal")
+            .font(.system(size: 32, weight: .thin, design: .rounded))
+            .foregroundColor(.white)
+            .shadow(color: .white.opacity(0.5), radius: 10, x: 0, y: 0)
+            .padding(.top, 40)
+    }
+
+    private var timeSignalToggleView: some View {
+        Button {
+            let impactLight = UIImpactFeedbackGenerator(style: .light)
+            impactLight.impactOccurred()
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                isOn.toggle()
+            }
+            if isOn {
+                scheduleNotifications()
+            } else {
+                removeTimeSignalNotifications()
+            }
+        } label: {
+            ZStack {
+                // グロー効果
+                Circle()
+                    .fill(isOn ? accentColor.opacity(0.3) : Color.gray.opacity(0.1))
+                    .frame(width: 140, height: 140)
+                    .blur(radius: 20)
+                
+                // ガラス本体
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 100, height: 100)
+                    .overlay(
+                        Circle().stroke(
+                            LinearGradient(colors: [.white.opacity(0.6), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1
+                        )
+                    )
+                    .shadow(color: .black.opacity(0.3), radius: 10, x: 5, y: 5)
+                
+                // アイコン
+                Image(systemName: isOn ? "bell.fill" : "bell.slash.fill")
+                    .resizable().scaledToFit().frame(width: 40, height: 40)
+                    .foregroundColor(isOn ? accentColor : .gray)
+                    .scaleEffect(isOn ? 1.1 : 1.0)
+                    .shadow(color: isOn ? accentColor.opacity(0.8) : .clear, radius: 10)
+            }
+        }
+        .accessibilityLabel(isOn ? "時報をオフにする" : "時報をオンにする")
+    }
+
+    private var statusView: some View {
+        Text(t(isOn ? "Active" : "Inactive"))
+            .font(.system(size: 16, weight: .medium, design: .monospaced))
+            .foregroundColor(isOn ? accentColor : .gray)
+            .padding(.bottom, 10)
+    }
+
+    private var quickSelectView: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack {
+                Text(t("Quick Select"))
+                    .font(.caption).foregroundColor(.white.opacity(0.6)).textCase(.uppercase)
+                Spacer()
+                // 全解除ボタン
+                Button {
+                   selectedMinutes.removeAll()
+                   saveSelectedMinutes()
+                   scheduleNotificationsDebounced()
+                } label: {
+                    Text(t("Clear All"))
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(10)
+                }
+            }
+            .padding(.horizontal, 20)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(bulkCategories) { category in
+                        Button {
+                            toggleBulkSelection(for: category.minutes)
+                        } label: {
+                            Text(category.name) // 簡易カテゴリ名はそのまま
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.vertical, 12).padding(.horizontal, 20)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(.white.opacity(0.2), lineWidth: 0.5)
+                                )
+                        }
+                        .disabled(!isOn)
+                        .opacity(isOn ? 1.0 : 0.4)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    private var settingsView: some View {
+        VStack(spacing: 20) {
+            soundSettingView
+            minuteSettingView
+        }
+        .padding(.bottom, 40)
+        .onChange(of: selectedSoundName) { _ in
+            _ = validateCurrentSoundAvailability()
+            scheduleNotificationsDebounced()
+        }
+    }
+
+    private var soundSettingView: some View {
+        HStack {
+            Text(t("Sound"))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white)
+            
+            Spacer()
+            
+            // コンパクトなSound選択（アイコン表示で展開）
+            Menu {
+                ForEach(soundOptions, id: \.self) { opt in
+                    Button {
+                        selectedSoundName = opt.name
+                    } label: {
+                        HStack {
+                            Text(opt.name)
+                            if selectedSoundName == opt.name {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+                Divider()
+                Button(action: { playSoundPreview() }) {
+                    Label(t("Preview"), systemImage: "speaker.wave.2")
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "speaker.wave.2.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(accentColor)
+                    
+                    Text(selectedSoundName)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var appearanceView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Appearance"))
+                .font(.caption).foregroundColor(.white.opacity(0.6)).textCase(.uppercase)
+                .padding(.leading, 20)
+            
+            VStack(spacing: 0) {
+                // Language
+                HStack {
+                    Text(t("Language"))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Picker("Language", selection: $languageCode) {
+                        Text("日本語").tag("ja")
+                        Text("English").tag("en")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 150)
+                }
+                .padding()
+                
+                Divider().background(.white.opacity(0.2))
+                
+                // Theme Color
+                HStack {
+                    Text(t("Theme Color"))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Picker("Color", selection: $selectedColorName) {
+                        Text("Cyan").tag("Cyan")
+                        Text("Mint").tag("Mint")
+                        Text("Green").tag("Green")
+                        Text("Orange").tag("Orange")
+                        Text("Pink").tag("Pink")
+                        Text("Indigo").tag("Indigo")
+                    }
+                    .pickerStyle(.menu)
+                    .accentColor(accentColor)
+                    .padding(4)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(8)
+                }
+                .padding()
+            }
+            .background(.ultraThinMaterial)
+            .cornerRadius(15)
+            .padding(.horizontal, 20)
+        }
+        .padding(.bottom, 40)
+    }
+
+    private var minuteSettingView: some View {
+        VStack(alignment: .leading) {
+            Text(t("Minutes"))
+                .font(.caption).foregroundColor(.white.opacity(0.6)).textCase(.uppercase)
+                .padding(.leading, 20)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))], spacing: 12) {
+                ForEach(availableMinutes, id: \.self) { (minute: Int) in
+                    let isSelected = selectedMinutes.contains(minute)
+                    Button {
+                        if isSelected { selectedMinutes.remove(minute) } else { selectedMinutes.insert(minute) }
+                        saveSelectedMinutes()
+                        scheduleNotificationsDebounced()
+                    } label: {
+                        Text(String(format: "%02d", minute))
+                            .font(.system(size: 18, weight: .medium, design: .monospaced))
+                            .foregroundColor(isSelected ? .black : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                isSelected ? AnyShapeStyle(accentColor.opacity(0.9)) : AnyShapeStyle(Material.ultraThinMaterial)
+                            )
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(isSelected ? accentColor : .white.opacity(0.2), lineWidth: 1)
+                            )
+                            .shadow(color: isSelected ? accentColor.opacity(0.5) : .clear, radius: 8)
+                    }
+                    .disabled(!isOn)
+                    .opacity(isOn ? 1.0 : 0.4)
+                }
+            }
+            .padding(.horizontal, 20)
         }
     }
 
@@ -316,35 +540,37 @@ struct ContentView: View {
             removeTimeSignalNotifications {
                 var added = 0
                 for minute in selectedMinutes {
-                    for hour in 0..<24 {
-                        var components = DateComponents()
-                        components.hour = hour
-                        components.minute = minute
-                        components.second = 0
+                    // hourを指定せず、minuteのみ指定して repeats: true にすると毎時実行される
+                    var components = DateComponents()
+                    components.minute = minute
+                    components.second = 0
+                    
+                    let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
 
-                        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-
-                        let content = UNMutableNotificationContent()
-                        content.title = "時報"
-                        content.body = String(format: "%02d時%02d分になりました。", hour, minute)
-                        #if DEBUG
-                        content.body += "（音: \(selectedSoundName)）"
-                        #endif
-                        content.sound = currentNotificationSound()
-                        content.categoryIdentifier = "TimeSignalCategory"
-                        if #available(iOS 15.0, *) {
-                            content.interruptionLevel = .timeSensitive
-                        }
-
-                        let identifier = "TimeSignalNotification_\(hour)_\(minute)"
-                        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-                        center.add(request) { error in
-                            if let error = error {
-                                print("通知追加失敗(\(identifier)):", error.localizedDescription)
-                            }
-                        }
-                        added += 1
+                    let content = UNMutableNotificationContent()
+                    content.title = "時報"
+                    // 毎時実行なので「00分になりました」のような汎用メッセージにするか、
+                    // 動的に変更はできないため、「お知らせ」程度にするのが無難だが、
+                    // 元の仕様に合わせて "毎時xx分をお知らせします" とする
+                    content.body = String(format: "毎時%02d分をお知らせします", minute)
+                    #if DEBUG
+                    content.body += "（音: \(selectedSoundName)）"
+                    #endif
+                    content.sound = currentNotificationSound()
+                    content.categoryIdentifier = "TimeSignalCategory"
+                    if #available(iOS 15.0, *) {
+                        content.interruptionLevel = .timeSensitive
                     }
+
+                    // IDは分ごとの固有IDにする
+                    let identifier = "TimeSignalNotification_EveryHour_\(minute)"
+                    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                    center.add(request) { error in
+                        if let error = error {
+                            print("通知追加失敗(\(identifier)):", error.localizedDescription)
+                        }
+                    }
+                    added += 1
                 }
                 center.getPendingNotificationRequests { reqs in
                     let mine = reqs.filter { $0.identifier.hasPrefix("TimeSignalNotification_") }
