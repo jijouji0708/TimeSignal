@@ -2,6 +2,7 @@
 import SwiftUI
 import UserNotifications
 import UIKit
+import AudioToolbox
 
 struct ContentView: View {
     // 状態保存
@@ -9,15 +10,44 @@ struct ContentView: View {
     @AppStorage("selectedSoundName") private var selectedSoundName: String = "デフォルト"
     @AppStorage("languageCode") private var languageCode: String = "ja"
     @AppStorage("selectedColorName") private var selectedColorName: String = "Cyan"
+    @AppStorage("dateFormat") private var dateFormat: String = "MM/dd"
+    @AppStorage("dayFormat") private var dayFormat: String = "(E)"
+    @AppStorage("isBackgroundAnimationEnabled") private var isBackgroundAnimationEnabled: Bool = true
+    @AppStorage("appearanceMode") private var appearanceMode: String = "dark" // light, dark, system
+    @AppStorage("isAlwaysOnEnabled") private var isAlwaysOnEnabled: Bool = false
+    @AppStorage("savedSetsData") private var savedSetsData: Data = Data()
+    @AppStorage("notifyConfigData") private var notifyConfigData: Data = Data()
+
+    
     private let selectedMinutesKey = "selectedMinutes"
+
+    // データモデル
+    struct TimeSignalSet: Identifiable, Codable {
+        var id = UUID()
+        var name: String
+        var minutes: Set<Int>
+    }
+    
+    struct NotificationConfig: Codable {
+        var isNotificationEnabled: Bool = true // バナー通知
+        var isSoundEnabled: Bool = true
+        var isVibrationEnabled: Bool = true // 振動（サウンドに依存する場合もあるが、極力制御）
+        var isFlashEnabled: Bool = false    // 画面フラッシュ（アプリ起動時のみ有効）
+    }
 
     // UI状態
     @State private var selectedMinutes: Set<Int> = []
+    @State private var savedSets: [TimeSignalSet] = []
+    @State private var notifyConfig = NotificationConfig()
+    
     @State private var scheduleWorkItem: DispatchWorkItem?
     @State private var showSettingsSheet: Bool = false
+    @State private var showMySetsSheet: Bool = false
     @State private var showSoundOffAlert: Bool = false
     @State private var showSoundMissingAlert: Bool = false
     @State private var missingSoundName: String = ""
+    @State private var isFlashing: Bool = false // フラッシュ用
+
     
     // 現在時刻（時計用）
     @State private var currentTime = Date()
@@ -77,6 +107,8 @@ struct ContentView: View {
         case "Appearance": return isJa ? "外観" : "Appearance"
         case "Language": return isJa ? "言語" : "Language"
         case "Theme Color": return isJa ? "テーマカラー" : "Theme Color"
+        case "Date Format": return isJa ? "日付表示" : "Date Format"
+        case "Day Format": return isJa ? "曜日表示" : "Day Format"
         case "Preview": return isJa ? "試聴" : "Preview"
         case "Sound Off Alert Title": return isJa ? "サウンドが無効" : "Sound Disabled"
         case "Sound Off Alert Msg": return isJa ? "設定 > 通知 > このアプリ > サウンド をオンにすると通知音が鳴ります。" : "Please enable Sound in Settings > Notifications > This App."
@@ -86,6 +118,21 @@ struct ContentView: View {
         case "OK": return "OK"
         case "Time Signal": return isJa ? "時報" : "Time Signal"
         case "Close": return isJa ? "閉じる" : "Close"
+        case "My Sets": return isJa ? "マイセット" : "My Sets"
+        case "Save Current": return isJa ? "現在の設定を保存" : "Save Current Selection"
+        case "Notification Options": return isJa ? "通知オプション" : "Notification Options"
+        case "Show Banner": return isJa ? "バナー通知" : "Show Banner"
+        case "Play Sound": return isJa ? "サウンド再生" : "Play Sound"
+        case "Vibration": return isJa ? "振動" : "Vibration"
+        case "Screen Flash": return isJa ? "画面フラッシュ(起動時)" : "Screen Flash (In-App)"
+
+        case "Hidden": return isJa ? "非表示" : "Hidden"
+        case "Background Animation": return isJa ? "背景アニメーション" : "Background Animation"
+        case "Theme Mode": return isJa ? "外観モード" : "Theme Mode"
+        case "Always On Screen": return isJa ? "常時表示 (自動ロック無効)" : "Always On Display"
+        case "System": return isJa ? "システム設定" : "System"
+        case "Light": return isJa ? "ライト" : "Light"
+        case "Dark": return isJa ? "ダーク" : "Dark"
         default: return key
         }
     }
@@ -93,9 +140,8 @@ struct ContentView: View {
     // MARK: - Body
     var body: some View {
         GeometryReader { geometry in
-            let isLandscape = geometry.size.width > geometry.size.height
             let shortestSide = min(geometry.size.width, geometry.size.height)
-            // 画面幅の72%に縮小して、ボタンのはみ出しを防止 (Small Screen対応)
+            // 画面幅の72%に縮小
             let clockSize = shortestSide * 0.72
             
             ZStack {
@@ -104,27 +150,26 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     topBarView
                     
-                    // デジタル時計追加
-                    digitalClockView
-                        .padding(.top, 10)
+                    // デジタル時計 + 日付
+                    digitalClockContainer
+                        .padding(.top, 0)
+                        .zIndex(5) // タップ操作のために前面に
                     
-                    Spacer(minLength: 10)
+                    Spacer(minLength: 40) // アナログ時計との重なりを防ぐ
                     
                     // 時計エリア
                     ZStack {
                         clockBackgroundView(size: clockSize)
                         clockFaceTicksView(size: clockSize)
-                        // 数字は削除
                         minuteSelectionButtonsView(size: clockSize)
                         clockHandsView(size: clockSize)
                         centerControlView(size: clockSize)
                     }
                     .frame(width: clockSize, height: clockSize)
-                    .opacity(isOn ? 1.0 : 0.5) // 全体を暗く
-                    .grayscale(isOn ? 0.0 : 1.0) // モノクロに
+                    .opacity(isOn ? 1.0 : 0.5)
+                    .grayscale(isOn ? 0.0 : 1.0)
                     .animation(.easeInOut, value: isOn)
-                    // スペース確保のためのパディング調整
-                    .padding(.vertical, 20)
+                    .padding(.vertical, 5) // 余白削減
                     
                     Spacer(minLength: 10)
                     
@@ -132,18 +177,34 @@ struct ContentView: View {
                         .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 0 : 20)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
-                // 画面が極端に狭い場合のスクロール対応（SEなど）
                 .padding(.bottom, 10)
+                
+                // 画面フラッシュ用オーバーレイ
+                if isFlashing {
+                    Color.white.opacity(0.8)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                        .zIndex(100)
+                }
             }
             .sheet(isPresented: $showSettingsSheet) {
                 settingsSheetView
             }
+            .sheet(isPresented: $showMySetsSheet) {
+                mySetsSheetView
+            }
             .onAppear {
                 loadSettings()
                 if isOn { scheduleNotifications() }
+                UIApplication.shared.isIdleTimerDisabled = isAlwaysOnEnabled
             }
+            .onChange(of: isAlwaysOnEnabled) { enabled in
+                UIApplication.shared.isIdleTimerDisabled = enabled
+            }
+            .preferredColorScheme(resolvedColorScheme)
             .onReceive(timer) { input in
                 currentTime = input
+                checkFlash(date: input)
             }
             .alert(t("Sound Off Alert Title"), isPresented: $showSoundOffAlert) {
                 Button(t("Open Settings")) { openSettings() }
@@ -161,44 +222,123 @@ struct ContentView: View {
 
     // MARK: - Subviews
     private var backgroundView: some View {
-        LinearGradient(gradient: Gradient(colors: [
-            Color(red: 0.1, green: 0.2, blue: 0.45),
-            Color(red: 0.05, green: 0.05, blue: 0.2),
-            Color(red: 0.2, green: 0.1, blue: 0.3)
-        ]), startPoint: gradientStart, endPoint: gradientEnd)
+        Group {
+            if resolvedColorScheme == .dark {
+                LinearGradient(gradient: Gradient(colors: [
+                    Color(red: 0.1, green: 0.2, blue: 0.45),
+                    Color(red: 0.05, green: 0.05, blue: 0.2),
+                    Color(red: 0.2, green: 0.1, blue: 0.3)
+                ]), startPoint: gradientStart, endPoint: gradientEnd)
+            } else {
+                LinearGradient(gradient: Gradient(colors: [
+                    Color(red: 0.9, green: 0.95, blue: 1.0),
+                    Color(red: 0.95, green: 0.95, blue: 1.0),
+                    Color(red: 0.9, green: 0.9, blue: 0.95)
+                ]), startPoint: gradientStart, endPoint: gradientEnd)
+            }
+        }
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
-                gradientStart = UnitPoint(x: 1, y: 1)
-                gradientEnd = UnitPoint(x: 0, y: 0)
+            if isBackgroundAnimationEnabled {
+                withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
+                    gradientStart = UnitPoint(x: 1, y: 1)
+                    gradientEnd = UnitPoint(x: 0, y: 0)
+                }
+            }
+        }
+        .onChange(of: isBackgroundAnimationEnabled) { enabled in
+            if enabled {
+                withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
+                    gradientStart = UnitPoint(x: 1, y: 1)
+                    gradientEnd = UnitPoint(x: 0, y: 0)
+                }
+            } else {
+                // アニメーション停止（実際には現在位置で止まるか、初期位置に戻る）
+                withAnimation(.linear(duration: 0.5)) {
+                    gradientStart = UnitPoint(x: 0, y: -2)
+                    gradientEnd = UnitPoint(x: 4, y: 0)
+                }
             }
         }
     }
     
-    // デジタル時計
-    private var digitalClockView: some View {
-        Text(currentTime, style: .time)
-            .font(.system(size: 40, weight: .bold, design: .monospaced))
-            .foregroundColor(.white.opacity(0.9))
-            .shadow(color: .white.opacity(0.3), radius: 5)
+    // デジタル時計 + 日付 (タップで変更可能)
+    private var digitalClockContainer: some View {
+        VStack(spacing: 0) { // 間隔を詰める
+            HStack(spacing: 8) {
+                // 日付表示 (タップ または 上下スワイプで変更)
+                Text(formatDateString(currentTime))
+                    .font(.system(size: 18, weight: .medium, design: .default))
+                    .foregroundColor(adaptiveTextColor.opacity(0.85))
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        cycleDateFormat(forward: true)
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                if value.translation.height < 0 { cycleDateFormat(forward: true) }
+                                else if value.translation.height > 0 { cycleDateFormat(forward: false) }
+                            }
+                    )
+                
+                // 曜日表示 (タップ または 上下スワイプで変更)
+                Text(formatDayString(currentTime))
+                    .font(.system(size: 18, weight: .medium, design: .default))
+                    .foregroundColor(adaptiveTextColor.opacity(0.85))
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        cycleDayFormat(forward: true)
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                if value.translation.height < 0 { cycleDayFormat(forward: true) }
+                                else if value.translation.height > 0 { cycleDayFormat(forward: false) }
+                            }
+                    )
+            }
+            // 両方非表示ならスペースごと消す
+            .opacity(dateFormat == "None" && dayFormat == "None" ? 0 : 1)
+            .animation(.easeInOut, value: dateFormat)
+            .animation(.easeInOut, value: dayFormat)
+            
+            Text(currentTime, style: .time)
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .foregroundColor(adaptiveTextColor.opacity(0.95))
+                .shadow(color: adaptiveTextColor.opacity(0.3), radius: 8)
+        }
+        .padding(.top, 10)
     }
     
     private var topBarView: some View {
         HStack {
+            // 設定ボタン (コンパクト化: アイコンのみ)
             Button {
                 showSettingsSheet = true
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.title2)
-                    .foregroundColor(.white.opacity(0.8))
-                    .padding(12)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
+                    .foregroundColor(adaptiveTextColor.opacity(0.7))
+                    .padding(8)
             }
+            
             Spacer()
+            
+            // マイセットボタン (コンパクト化: アイコンのみ)
+            Button {
+                showMySetsSheet = true
+            } label: {
+                Image(systemName: "list.star")
+                    .font(.title2)
+                    .foregroundColor(adaptiveTextColor.opacity(0.7))
+                    .padding(8)
+            }
         }
-        .padding(.horizontal)
-        .padding(.top, 50)
+        .padding(.horizontal, 20)
+        .padding(.top, 40)
     }
 
     // MARK: - Clock Components
@@ -210,7 +350,7 @@ struct ContentView: View {
             .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
             .overlay(
                 Circle().stroke(
-                    LinearGradient(colors: [.white.opacity(0.5), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    LinearGradient(colors: [adaptiveTextColor.opacity(0.5), adaptiveTextColor.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing),
                     lineWidth: 1
                 )
             )
@@ -220,7 +360,7 @@ struct ContentView: View {
         let radius = size / 2
         return ForEach(0..<60) { i in
             Rectangle()
-                .fill(i % 5 == 0 ? Color.white.opacity(0.8) : Color.white.opacity(0.3))
+                .fill(i % 5 == 0 ? adaptiveTextColor.opacity(0.8) : adaptiveTextColor.opacity(0.3))
                 .frame(width: i % 5 == 0 ? 3 : 1, height: i % 5 == 0 ? size * 0.04 : size * 0.02)
                 .offset(y: -(radius * 0.9))
                 .rotationEffect(.degrees(Double(i) * 6))
@@ -238,7 +378,8 @@ struct ContentView: View {
         let angle = Double(minute) * 6.0 - 90.0
         // ボタン配置半径
         let radius = (clockSize / 2) * 1.08
-        let buttonSize = clockSize * 0.14
+        // 選択時は大きく
+        let buttonSize = isSelected ? clockSize * 0.16 : clockSize * 0.12
         
         return Button {
             guard isOn else { return }
@@ -250,25 +391,29 @@ struct ContentView: View {
         } label: {
             ZStack {
                 if isSelected {
+                    // 選択時の強いグロー
                     Circle()
                         .fill(accentColor.opacity(0.6))
-                        .frame(width: buttonSize * 0.8, height: buttonSize * 0.8)
+                        .frame(width: buttonSize, height: buttonSize)
                         .shadow(color: accentColor.opacity(0.8), radius: 8)
                 }
+                
                 Circle()
-                    .fill(isSelected ? AnyShapeStyle(accentColor) : AnyShapeStyle(Material.ultraThinMaterial))
+                    // 不透明へ変更
+                    .fill(isSelected ? AnyShapeStyle(accentColor) : AnyShapeStyle(Color(white: 0.25)))
                     .frame(width: buttonSize, height: buttonSize)
                     .overlay(
-                        Circle().stroke(Color.white.opacity(0.5), lineWidth: 1)
+                        Circle().stroke(isSelected ? Color.white : Color.white.opacity(0.3), lineWidth: isSelected ? 2 : 0)
                     )
                     .overlay(
                         Text(String(format: "%02d", minute))
-                            .font(.system(size: buttonSize * 0.35, weight: .bold, design: .monospaced))
-                            .foregroundColor(isSelected ? .black : .white)
+                            .font(.system(size: buttonSize * 0.4, weight: .bold, design: .rounded))
+                            .foregroundColor(isSelected ? .white : .gray)
                     )
             }
         }
         .offset(x: radius * cos(angle * .pi / 180), y: radius * sin(angle * .pi / 180))
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected) // サイズ変更のアニメーション
         .disabled(!isOn)
     }
     
@@ -309,29 +454,20 @@ struct ContentView: View {
     // 中央ボタン：有効／無効スイッチ
     private func centerControlView(size: CGFloat) -> some View {
         Button {
-            let impact = UIImpactFeedbackGenerator(style: .medium)
-            impact.impactOccurred()
-            withAnimation(.spring()) {
-                isOn.toggle()
-            }
-            if isOn { scheduleNotifications() } else { removeTimeSignalNotifications() }
+            togglePower()
         } label: {
             ZStack {
                 Circle()
-                    .fill(isOn ? AnyShapeStyle(Material.thinMaterial) : AnyShapeStyle(Color.black)) // OFF時は不透明な黒
+                    .fill(isOn ? AnyShapeStyle(accentColor.opacity(0.9)) : AnyShapeStyle(Color.black)) // ONならテーマカラー
                     .frame(width: size * 0.2, height: size * 0.2)
                     .overlay(
-                        Circle().stroke(isOn ? accentColor.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 2)
+                        Circle().stroke(isOn ? adaptiveTextColor.opacity(0.3) : adaptiveTextColor.opacity(0.1), lineWidth: 2)
                     )
-                    .shadow(color: isOn ? accentColor.opacity(0.3) : .clear, radius: 10)
+                    .shadow(color: isOn ? accentColor.opacity(0.5) : .clear, radius: 10)
                 
-                VStack(spacing: 2) {
-                    Image(systemName: "power")
-                        .font(.system(size: size * 0.08, weight: .bold))
-                    Text(isOn ? "ON" : "OFF")
-                        .font(.system(size: size * 0.03, weight: .bold, design: .monospaced))
-                }
-                .foregroundColor(isOn ? accentColor : .gray)
+                Image(systemName: "power")
+                    .font(.system(size: size * 0.1, weight: .bold)) // 少し大きく
+                    .foregroundColor(isOn ? .white : .gray) // ONなら白、OFFならグレー
             }
         }
         .zIndex(10)
@@ -356,7 +492,7 @@ struct ContentView: View {
                     } label: {
                         Text(languageCode == "ja" ? category.jaName : category.enName)
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(adaptiveTextColor)
                             .padding(.vertical, 12)
                             .frame(maxWidth: .infinity)
                             .background(.ultraThinMaterial)
@@ -392,10 +528,7 @@ struct ContentView: View {
 
             // 下部のメインスイッチ
             Button {
-                let impact = UIImpactFeedbackGenerator(style: .heavy)
-                impact.impactOccurred()
-                withAnimation(.spring()) { isOn.toggle() }
-                if isOn { scheduleNotifications() } else { removeTimeSignalNotifications() }
+                togglePower()
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "power")
@@ -403,7 +536,7 @@ struct ContentView: View {
                     Text(isOn ? "ON" : "OFF")
                         .font(.title3.bold().monospaced())
                 }
-                .foregroundColor(isOn ? .black : .white)
+                .foregroundColor(isOn ? .white : .gray)
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity)
                 .background(
@@ -412,7 +545,7 @@ struct ContentView: View {
                 .cornerRadius(20)
                 .shadow(color: isOn ? accentColor.opacity(0.6) : .black.opacity(0.3), radius: 15, x: 0, y: 5)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 20).stroke(adaptiveTextColor.opacity(0.2), lineWidth: 1)
                 )
             }
             .padding(.horizontal, 30)
@@ -423,18 +556,100 @@ struct ContentView: View {
         NavigationView {
             Form {
                 Section(header: Text(t("Appearance"))) {
+                    Picker(t("Theme Mode"), selection: $appearanceMode) {
+                        Text(t("System")).tag("system")
+                        Text(t("Light")).tag("light")
+                        Text(t("Dark")).tag("dark")
+                    }
+                    
                     Picker(t("Language"), selection: $languageCode) {
                         Text("日本語").tag("ja")
                         Text("English").tag("en")
                     }
                     
-                    Picker(t("Theme Color"), selection: $selectedColorName) {
-                        colorRow(name: "Cyan", color: .cyan)
-                        colorRow(name: "Mint", color: .mint)
-                        colorRow(name: "Green", color: .green)
-                        colorRow(name: "Orange", color: .orange)
-                        colorRow(name: "Pink", color: .pink)
-                        colorRow(name: "Indigo", color: .indigo)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(t("Theme Color"))
+                        // スワイプ（ドラッグ）で選択できるように調整
+                        GeometryReader { geo in
+                            let colors = ["Cyan", "Mint", "Green", "Orange", "Pink", "Indigo"]
+                            let width = geo.size.width
+                            let itemWidth = width / CGFloat(colors.count)
+                            
+                            HStack(spacing: 0) {
+                                ForEach(colors.indices, id: \.self) { index in
+                                    let colorName = colors[index]
+                                    ZStack {
+                                        // Glass/Liquid Effect
+                                        Circle()
+                                            .fill(colorForName(colorName))
+                                            .frame(width: 40, height: 40)
+                                            .shadow(color: colorForName(colorName).opacity(0.6), radius: 6, x: 0, y: 4)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                                            )
+                                            .overlay(
+                                                Circle() // ハイライト
+                                                    .fill(LinearGradient(
+                                                        colors: [.white.opacity(0.7), .clear],
+                                                        startPoint: .topLeading,
+                                                        endPoint: .bottomTrailing
+                                                    ))
+                                                    .frame(width: 36, height: 36)
+                                                    .offset(x: -1, y: -1)
+                                                    .clipShape(Circle())
+                                                    .padding(2)
+                                            )
+                                        
+                                        if selectedColorName == colorName {
+                                            Circle()
+                                                .stroke(Color.primary.opacity(0.8), lineWidth: 2)
+                                                .frame(width: 48, height: 48)
+                                        }
+                                    }
+                                    .frame(width: itemWidth, height: 60)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        let impact = UIImpactFeedbackGenerator(style: .light)
+                                        impact.impactOccurred()
+                                        selectedColorName = colorName
+                                    }
+                                }
+                            }
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        let locationX = value.location.x
+                                        let index = Int(locationX / itemWidth)
+                                        if index >= 0 && index < colors.count {
+                                            let newColor = colors[index]
+                                            if selectedColorName != newColor {
+                                                let impact = UIImpactFeedbackGenerator(style: .light)
+                                                impact.impactOccurred()
+                                                selectedColorName = newColor
+                                            }
+                                        }
+                                    }
+                            )
+                        }
+                        .frame(height: 60)
+                    }
+                    
+                    Toggle(t("Background Animation"), isOn: $isBackgroundAnimationEnabled)
+                    Toggle(t("Always On Screen"), isOn: $isAlwaysOnEnabled)
+                    
+                    // 設定画面でも変更できるようにしておく
+                    Picker(t("Date Format"), selection: $dateFormat) {
+                        Text(exampleDate("yyyy/MM/dd")).tag("yyyy/MM/dd")
+                        Text(exampleDate("MM/dd")).tag("MM/dd")
+                        Text(exampleDate("dd/MM")).tag("dd/MM")
+                        Text(t("Hidden")).tag("None")
+                    }
+                    Picker(t("Day Format"), selection: $dayFormat) {
+                        Text(exampleDate("(E)")).tag("(E)")
+                        Text(exampleDate("E")).tag("E")
+                        Text(exampleDate("EEEE")).tag("EEEE")
+                        Text(t("Hidden")).tag("None")
                     }
                 }
                 
@@ -447,6 +662,7 @@ struct ContentView: View {
                     .onChange(of: selectedSoundName) { _ in
                         _ = validateCurrentSoundAvailability()
                         scheduleNotificationsDebounced()
+                        playSoundPreview()
                     }
                     
                     Button {
@@ -460,6 +676,21 @@ struct ContentView: View {
                     }
                 }
                 
+                Section(header: Text(t("Notification Options"))) {
+                    Toggle(t("Show Banner"), isOn: $notifyConfig.isNotificationEnabled)
+                    Toggle(t("Play Sound"), isOn: $notifyConfig.isSoundEnabled)
+                    Toggle(t("Screen Flash"), isOn: $notifyConfig.isFlashEnabled)
+                    Toggle(t("Vibration"), isOn: $notifyConfig.isVibrationEnabled)
+                    if notifyConfig.isVibrationEnabled {
+                        Text("※ iPhone本体の設定やマナーモードにより振動しない場合があります。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .onChange(of: notifyConfig.isNotificationEnabled) { _ in saveConfig(); scheduleNotificationsDebounced() }
+                .onChange(of: notifyConfig.isSoundEnabled) { _ in saveConfig(); scheduleNotificationsDebounced() }
+                .onChange(of: notifyConfig.isFlashEnabled) { _ in saveConfig() } // 通知スケジュールには影響しない
+                
                 Section(footer: Text("Time Signal App")) {
                     // Empty
                 }
@@ -471,22 +702,127 @@ struct ContentView: View {
         }
     }
     
-    // カラー選択行のヘルパー
-    private func colorRow(name: String, color: Color) -> some View {
-        HStack {
-            Circle()
-                .fill(color)
-                .frame(width: 12, height: 12)
-            Text(name)
+    // マイセット管理画面
+    private var mySetsSheetView: some View {
+        NavigationView {
+            List {
+                Section {
+                    Button(t("Save Current")) {
+                        saveCurrentAsSet()
+                    }
+                    .disabled(selectedMinutes.isEmpty)
+                }
+                
+                Section(header: Text(t("My Sets"))) {
+                    ForEach($savedSets) { $set in
+                        HStack {
+                            TextField("Set Name", text: $set.name)
+                                .onChange(of: set.name) { _ in saveMySets() }
+                            Spacer()
+                            Button("Load") {
+                                selectedMinutes = set.minutes
+                                saveSelectedMinutes()
+                                scheduleNotificationsDebounced()
+                                showMySetsSheet = false
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .onDelete { idx in
+                        savedSets.remove(atOffsets: idx)
+                        saveMySets()
+                    }
+                }
+            }
+            .navigationTitle(t("My Sets"))
+            .navigationBarItems(trailing: Button(t("Close")) {
+                showMySetsSheet = false
+            })
         }
-        .tag(name)
+    }
+    
+    // カラー選択ヘルパー
+    private func colorForName(_ name: String) -> Color {
+        switch name {
+        case "Mint": return .mint
+        case "Indigo": return .indigo
+        case "Pink": return .pink
+        case "Orange": return .orange
+        case "Green": return .green
+        default: return .cyan
+        }
     }
 
     // MARK: - Logic Helpers
-    // ... (rest of logic) ...
-    // scheduleNotifications below checks repeating
+    
+    // テーマごとの文字色
+    private var adaptiveTextColor: Color {
+        resolvedColorScheme == .dark ? .white : .black
+    }
+    
+    private var resolvedColorScheme: ColorScheme {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return .dark // デフォルトはダーク、システム設定に追従させたい場合は Environment から取るが必要
+        }
+    }
+    
+    // 現在時刻で例を表示するためのヘルパー
+    private func exampleDate(_ format: String) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: languageCode)
+        formatter.dateFormat = format
+        return formatter.string(from: Date())
+    }
+    
+    private func formatDateString(_ date: Date) -> String {
+        guard dateFormat != "None" else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: languageCode)
+        formatter.dateFormat = dateFormat
+        return formatter.string(from: date)
+    }
+    
+    private func formatDayString(_ date: Date) -> String {
+        guard dayFormat != "None" else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: languageCode)
+        formatter.dateFormat = dayFormat
+        return formatter.string(from: date)
+    }
+    
+    // 日付フォーマットのサイクル
+    private func cycleDateFormat(forward: Bool) {
+        let options = ["yyyy/MM/dd", "MM/dd", "dd/MM", "None"]
+        if let idx = options.firstIndex(of: dateFormat) {
+            let nextIdx = forward ? (idx + 1) % options.count : (idx - 1 + options.count) % options.count
+            let impact = UIImpactFeedbackGenerator(style: .light)
+            impact.impactOccurred()
+            dateFormat = options[nextIdx]
+        } else {
+            dateFormat = options[0]
+        }
+    }
+    
+    // 曜日フォーマットのサイクル
+    private func cycleDayFormat(forward: Bool) {
+        let options = ["(E)", "E", "EEEE", "None"]
+        if let idx = options.firstIndex(of: dayFormat) {
+            let nextIdx = forward ? (idx + 1) % options.count : (idx - 1 + options.count) % options.count
+            let impact = UIImpactFeedbackGenerator(style: .light)
+            impact.impactOccurred()
+            dayFormat = options[nextIdx]
+        } else {
+            dayFormat = options[0]
+        }
+    }
     
     private func currentNotificationSound() -> UNNotificationSound {
+        // サウンド設定がOFFならnil（デフォルト音も鳴らないようにするなら別対応が必要だが、UNNotificationSoundはOptionalではない）
+        // UNNotificationContent.sound can be nil.
+        // ここではSoundObjectを返す関数なので...
+        // 呼び出し元で制御する
         if let opt = soundOptions.first(where: { $0.name == selectedSoundName }),
            let file = opt.fileName {
             let parts = file.split(separator: ".")
@@ -535,6 +871,9 @@ struct ContentView: View {
     }
     
     private func playSoundPreview() {
+        // 設定でサウンドOFFでもプレビューは鳴らす？ → いや、OFFなら鳴らさないのが筋
+        guard notifyConfig.isSoundEnabled else { return }
+        
         let content = UNMutableNotificationContent()
         content.title = "サウンドプレビュー"
         content.body = "\(selectedSoundName) を再生します"
@@ -556,6 +895,12 @@ struct ContentView: View {
     func scheduleNotifications() {
         let center = UNUserNotificationCenter.current()
         guard isOn, !selectedMinutes.isEmpty else { return }
+        
+        // 通知設定チェック
+        // 通知自体がOFFの場合はスケジュールしない、という手もあるが、
+        // 「サウンドのみON」の場合、バックグラウンドで音を鳴らすには通知が必要。
+        // タイトル空、サウンドありで送る。
+        
         center.getNotificationSettings { settings in
             var authorized = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
             if #available(iOS 14.0, *) { authorized = authorized || settings.authorizationStatus == .ephemeral }
@@ -570,21 +915,39 @@ struct ContentView: View {
                     components.second = 0
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
                     let content = UNMutableNotificationContent()
-                    // ユーザ要望: "Notification display... simple '9:45' etc."
-                    // 繰り返しの通知のため、動的な時間は指定不可だが、システムヘッダーが出るのでBodyはシンプルに
-                    content.title = "Time Signal"
-                    content.body = "" // Bodyを空にしてシンプルに
-                    // 0分ジャストの場合は特別なタイトルにするか？（任意）
-                    if minute == 0 { content.title = "00:00 Time Signal" }
                     
-                    content.sound = currentNotificationSound()
+                    // タイトル・本文の制御（ユーザー要望: Time Signalなどの文字を消す）
+                    // バナーOFFの場合は空にしてみる（OS挙動依存）
+                    if notifyConfig.isNotificationEnabled {
+                        content.title = "" // タイトル空
+                        content.body = ""  // 本文空（システムがアプリアイコンと時間を表示するはず）
+                    } else {
+                        // バナーOFFでも音を鳴らすために空通知を送るが、OS仕様でバナーが出る可能性あり
+                        // .badge = 0 等を設定
+                        content.title = ""
+                        content.body = "" 
+                    }
+                    // 振動
+                    if notifyConfig.isVibrationEnabled {
+                        // AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) は古いAPIでシミュレータ等で反応しないことがある
+                        // Haptic Feedbackを使用する (iPhone 7以降)
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success) 
+                    }
+                    
+                    if notifyConfig.isSoundEnabled {
+                        content.sound = currentNotificationSound()
+                    } else {
+                        // サウンドなし
+                        content.sound = nil
+                    }
+                    
                     content.categoryIdentifier = "TimeSignalCategory"
                     if #available(iOS 15.0, *) { content.interruptionLevel = .timeSensitive }
                     let identifier = "TimeSignalNotification_EveryHour_\(minute)"
                     let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
                     center.add(request)
                 }
-                // 初回テスト通知(scheduleFirstBridgeIfNeeded)は削除
             }
         }
     }
@@ -610,5 +973,97 @@ struct ContentView: View {
         if let arr = UserDefaults.standard.array(forKey: selectedMinutesKey) as? [Int] {
             selectedMinutes = Set(arr)
         }
+        
+        // Load MySets
+        if let loadedSets = try? JSONDecoder().decode([TimeSignalSet].self, from: savedSetsData) {
+            savedSets = loadedSets
+        }
+        
+        // Load NotifyConfig
+        if let loadedConfig = try? JSONDecoder().decode(NotificationConfig.self, from: notifyConfigData) {
+            notifyConfig = loadedConfig
+        }
+    }
+    
+    private func saveMySets() {
+        if let data = try? JSONEncoder().encode(savedSets) {
+            savedSetsData = data
+        }
+    }
+    
+    private func saveCurrentAsSet() {
+        let newSet = TimeSignalSet(name: "Set \(savedSets.count + 1)", minutes: selectedMinutes)
+        savedSets.append(newSet)
+        saveMySets()
+    }
+    
+    private func saveConfig() {
+        if let data = try? JSONEncoder().encode(notifyConfig) {
+            notifyConfigData = data
+        }
+    }
+    
+    private func togglePower() {
+        let impact = UIImpactFeedbackGenerator(style: .medium)
+        impact.impactOccurred()
+        
+        if isOn {
+            // OFFにする
+            withAnimation(.spring()) { isOn = false }
+            removeTimeSignalNotifications()
+        } else {
+            // ONにする（権限チェック）
+            let center = UNUserNotificationCenter.current()
+            center.getNotificationSettings { settings in
+                if settings.authorizationStatus == .notDetermined {
+                    center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                        DispatchQueue.main.async {
+                            if granted {
+                                withAnimation(.spring()) { self.isOn = true }
+                                self.scheduleNotifications()
+                            } else {
+                                // 拒否された場合はOFFのまま
+                            }
+                        }
+                    }
+                } else if settings.authorizationStatus == .denied {
+                    DispatchQueue.main.async {
+                        withAnimation(.spring()) { self.isOn = true }
+                        self.scheduleNotifications()
+                         self.showSoundOffAlert = true
+                    }
+                } else {
+                    // 許可済み
+                    DispatchQueue.main.async {
+                        withAnimation(.spring()) { self.isOn = true }
+                        self.scheduleNotifications()
+                    }
+                }
+            }
+        }
+    }
+    
+    // 画面フラッシュ判定
+    private func checkFlash(date: Date) {
+        guard isOn, notifyConfig.isFlashEnabled else { return }
+        let cal = Calendar.current
+        let min = cal.component(.minute, from: date)
+        let sec = cal.component(.second, from: date)
+        
+        if selectedMinutes.contains(min) && sec == 0 {
+            // フラッシュ (3回点滅: 点灯->消灯 を3セット)
+            // 0.1秒点灯、0.1秒消灯 を繰り返す
+            // 0.2秒周期 x 3回 = 0.6秒
+            withAnimation(.linear(duration: 0.1).repeatCount(6, autoreverses: true)) {
+                isFlashing = true
+            }
+            // アニメーション完了後に確実にfalseにする
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                isFlashing = false
+            }
+        }
     }
 }
+
+
+
