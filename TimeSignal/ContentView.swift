@@ -3,6 +3,7 @@ import SwiftUI
 import UserNotifications
 import UIKit
 import AudioToolbox
+import AVFoundation
 
 struct ContentView: View {
     // 状態保存
@@ -31,16 +32,19 @@ struct ContentView: View {
     struct NotificationConfig: Codable {
         var isNotificationEnabled: Bool = true // バナー通知
         var isSoundEnabled: Bool = true
-        var isVibrationEnabled: Bool = true // 振動（サウンドに依存する場合もあるが、極力制御）
         var isFlashEnabled: Bool = false    // 画面フラッシュ（アプリ起動時のみ有効）
     }
+
 
     // UI状態
     @State private var selectedMinutes: Set<Int> = []
     @State private var savedSets: [TimeSignalSet] = []
     @State private var notifyConfig = NotificationConfig()
     
+    @State private var colorDragPreviousWidth: CGFloat = 0 // カラー選択スワイプ用
+    
     @State private var scheduleWorkItem: DispatchWorkItem?
+    @State private var audioManager = AudioManager() // プレビュー再生用 (State更新による再描画を防ぐためクラス化)
     @State private var showSettingsSheet: Bool = false
     @State private var showMySetsSheet: Bool = false
     @State private var showSoundOffAlert: Bool = false
@@ -63,10 +67,9 @@ struct ContentView: View {
 
     struct SoundOption: Hashable { let name: String; let fileName: String? }
     private let soundOptions: [SoundOption] = [
-        .init(name: "デフォルト", fileName: nil),
-        .init(name: "ベル", fileName: "bell.caf"),
-        .init(name: "チャイム", fileName: "chime.caf"),
-        .init(name: "ピッピッピッポーン", fileName: "pippippippon.caf")
+        .init(name: "Default", fileName: nil),
+        .init(name: "Bell", fileName: "bell.caf"),
+        .init(name: "Chime", fileName: "chime.caf")
     ]
     
     struct BulkCategory: Identifiable {
@@ -123,7 +126,8 @@ struct ContentView: View {
         case "Notification Options": return isJa ? "通知オプション" : "Notification Options"
         case "Show Banner": return isJa ? "バナー通知" : "Show Banner"
         case "Play Sound": return isJa ? "サウンド再生" : "Play Sound"
-        case "Vibration": return isJa ? "振動" : "Vibration"
+        case "Play Sound": return isJa ? "サウンド再生" : "Play Sound"
+        // case "Vibration": 削除
         case "Screen Flash": return isJa ? "画面フラッシュ(起動時)" : "Screen Flash (In-App)"
 
         case "Hidden": return isJa ? "非表示" : "Hidden"
@@ -133,6 +137,16 @@ struct ContentView: View {
         case "System": return isJa ? "システム設定" : "System"
         case "Light": return isJa ? "ライト" : "Light"
         case "Dark": return isJa ? "ダーク" : "Dark"
+        
+        // Sounds
+        case "Default": return isJa ? "デフォルト" : "Default"
+        case "Bell": return isJa ? "ベル" : "Bell"
+        case "Chime": return isJa ? "チャイム" : "Chime"
+        
+        // My Sets
+        case "Set Name": return isJa ? "セット名" : "Set Name"
+        case "Load": return isJa ? "読み込み" : "Load"
+        
         default: return key
         }
     }
@@ -149,6 +163,8 @@ struct ContentView: View {
                 
                 VStack(spacing: 0) {
                     topBarView
+                    
+
                     
                     // デジタル時計 + 日付
                     digitalClockContainer
@@ -195,6 +211,7 @@ struct ContentView: View {
             }
             .onAppear {
                 loadSettings()
+                // UNUserNotificationCenter.current().delegate is handled in AppDelegate
                 if isOn { scheduleNotifications() }
                 UIApplication.shared.isIdleTimerDisabled = isAlwaysOnEnabled
             }
@@ -313,6 +330,8 @@ struct ContentView: View {
         .padding(.top, 10)
     }
     
+
+    
     private var topBarView: some View {
         HStack {
             // 設定ボタン (コンパクト化: アイコンのみ)
@@ -324,6 +343,11 @@ struct ContentView: View {
                     .foregroundColor(adaptiveTextColor.opacity(0.7))
                     .padding(8)
             }
+            
+            Spacer()
+            
+            // テーマカラー選択 (中央に配置)
+            colorSelectionView
             
             Spacer()
             
@@ -339,6 +363,60 @@ struct ContentView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 40)
+    }
+    
+    // テーマカラー選択 (1つのドット、スワイプで変更)
+    private var colorSelectionView: some View {
+        let colors = ["Cyan", "Mint", "Green", "Orange", "Pink", "Indigo"]
+        
+        return ZStack {
+             // インジケーター (現在選択中の色)
+             Circle()
+                .fill(colorForName(selectedColorName))
+                .frame(width: 14, height: 14) // とても小さくミニマルに
+                .shadow(color: colorForName(selectedColorName).opacity(0.8), radius: 6)
+                .overlay(
+                    Circle().stroke(Color.white.opacity(0.8), lineWidth: 1.5)
+                )
+                // タッチ領域を広げるための透明なカバー
+                .background(
+                    Circle()
+                        .fill(Color.white.opacity(0.001))
+                        .frame(width: 60, height: 60)
+                )
+        }
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    let dragDiff = value.translation.width - colorDragPreviousWidth
+                    let threshold: CGFloat = 30.0 // 感度
+                    
+                    if abs(dragDiff) > threshold {
+                        // 次/前の色へ
+                        let direction = dragDiff > 0 ? -1 : 1 // 右スワイプで戻る、左で進む
+                        shiftColor(offset: direction, colors: colors)
+                        colorDragPreviousWidth = value.translation.width
+                        
+                        let impact = UIImpactFeedbackGenerator(style: .light)
+                        impact.impactOccurred()
+                    }
+                }
+                .onEnded { _ in
+                    colorDragPreviousWidth = 0
+                }
+        )
+    }
+    
+    // カラー変更ロジック
+    private func shiftColor(offset: Int, colors: [String]) {
+        guard let currentIndex = colors.firstIndex(of: selectedColorName) else { return }
+        var newIndex = currentIndex + offset
+        
+        // ループ処理
+        if newIndex < 0 { newIndex = colors.count - 1 }
+        else if newIndex >= colors.count { newIndex = 0 }
+        
+        selectedColorName = colors[newIndex]
     }
 
     // MARK: - Clock Components
@@ -566,74 +644,11 @@ struct ContentView: View {
                         Text("日本語").tag("ja")
                         Text("English").tag("en")
                     }
-                    
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(t("Theme Color"))
-                        // スワイプ（ドラッグ）で選択できるように調整
-                        GeometryReader { geo in
-                            let colors = ["Cyan", "Mint", "Green", "Orange", "Pink", "Indigo"]
-                            let width = geo.size.width
-                            let itemWidth = width / CGFloat(colors.count)
-                            
-                            HStack(spacing: 0) {
-                                ForEach(colors.indices, id: \.self) { index in
-                                    let colorName = colors[index]
-                                    ZStack {
-                                        // Glass/Liquid Effect
-                                        Circle()
-                                            .fill(colorForName(colorName))
-                                            .frame(width: 40, height: 40)
-                                            .shadow(color: colorForName(colorName).opacity(0.6), radius: 6, x: 0, y: 4)
-                                            .overlay(
-                                                Circle()
-                                                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
-                                            )
-                                            .overlay(
-                                                Circle() // ハイライト
-                                                    .fill(LinearGradient(
-                                                        colors: [.white.opacity(0.7), .clear],
-                                                        startPoint: .topLeading,
-                                                        endPoint: .bottomTrailing
-                                                    ))
-                                                    .frame(width: 36, height: 36)
-                                                    .offset(x: -1, y: -1)
-                                                    .clipShape(Circle())
-                                                    .padding(2)
-                                            )
-                                        
-                                        if selectedColorName == colorName {
-                                            Circle()
-                                                .stroke(Color.primary.opacity(0.8), lineWidth: 2)
-                                                .frame(width: 48, height: 48)
-                                        }
-                                    }
-                                    .frame(width: itemWidth, height: 60)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        let impact = UIImpactFeedbackGenerator(style: .light)
-                                        impact.impactOccurred()
-                                        selectedColorName = colorName
-                                    }
-                                }
-                            }
-                            .gesture(
-                                DragGesture(minimumDistance: 0)
-                                    .onChanged { value in
-                                        let locationX = value.location.x
-                                        let index = Int(locationX / itemWidth)
-                                        if index >= 0 && index < colors.count {
-                                            let newColor = colors[index]
-                                            if selectedColorName != newColor {
-                                                let impact = UIImpactFeedbackGenerator(style: .light)
-                                                impact.impactOccurred()
-                                                selectedColorName = newColor
-                                            }
-                                        }
-                                    }
-                            )
-                        }
-                        .frame(height: 60)
+                    .onChange(of: languageCode) { _ in
+                        scheduleNotificationsDebounced()
                     }
+                    
+
                     
                     Toggle(t("Background Animation"), isOn: $isBackgroundAnimationEnabled)
                     Toggle(t("Always On Screen"), isOn: $isAlwaysOnEnabled)
@@ -656,7 +671,7 @@ struct ContentView: View {
                 Section(header: Text(t("Sound"))) {
                     Picker(t("Sound"), selection: $selectedSoundName) {
                         ForEach(soundOptions, id: \.self) { opt in
-                            Text(opt.name).tag(opt.name)
+                            Text(t(opt.name)).tag(opt.name)
                         }
                     }
                     .onChange(of: selectedSoundName) { _ in
@@ -680,12 +695,6 @@ struct ContentView: View {
                     Toggle(t("Show Banner"), isOn: $notifyConfig.isNotificationEnabled)
                     Toggle(t("Play Sound"), isOn: $notifyConfig.isSoundEnabled)
                     Toggle(t("Screen Flash"), isOn: $notifyConfig.isFlashEnabled)
-                    Toggle(t("Vibration"), isOn: $notifyConfig.isVibrationEnabled)
-                    if notifyConfig.isVibrationEnabled {
-                        Text("※ iPhone本体の設定やマナーモードにより振動しない場合があります。")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
                 }
                 .onChange(of: notifyConfig.isNotificationEnabled) { _ in saveConfig(); scheduleNotificationsDebounced() }
                 .onChange(of: notifyConfig.isSoundEnabled) { _ in saveConfig(); scheduleNotificationsDebounced() }
@@ -716,10 +725,10 @@ struct ContentView: View {
                 Section(header: Text(t("My Sets"))) {
                     ForEach($savedSets) { $set in
                         HStack {
-                            TextField("Set Name", text: $set.name)
+                            TextField(t("Set Name"), text: $set.name)
                                 .onChange(of: set.name) { _ in saveMySets() }
                             Spacer()
-                            Button("Load") {
+                            Button(t("Load")) {
                                 selectedMinutes = set.minutes
                                 saveSelectedMinutes()
                                 scheduleNotificationsDebounced()
@@ -871,18 +880,30 @@ struct ContentView: View {
     }
     
     private func playSoundPreview() {
-        // 設定でサウンドOFFでもプレビューは鳴らす？ → いや、OFFなら鳴らさないのが筋
         guard notifyConfig.isSoundEnabled else { return }
         
-        let content = UNMutableNotificationContent()
-        content.title = "サウンドプレビュー"
-        content.body = "\(selectedSoundName) を再生します"
-        content.sound = currentNotificationSound()
-        content.categoryIdentifier = "TimeSignalCategory"
-        if #available(iOS 15.0, *) { content.interruptionLevel = .timeSensitive }
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        let request = UNNotificationRequest(identifier: "TimeSignal_SoundPreview", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
+        // AVAudioPlayerを使って即座に鳴らす
+        guard let opt = soundOptions.first(where: { $0.name == selectedSoundName }) else { return }
+        
+        if let fileName = opt.fileName {
+            let parts = fileName.split(separator: ".")
+            if parts.count == 2,
+               let url = Bundle.main.url(forResource: String(parts[0]), withExtension: String(parts[1])) {
+                do {
+                    // 他の音を止めて再生
+                    try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
+                    try AVAudioSession.sharedInstance().setActive(true)
+                    
+                    audioManager.player = try AVAudioPlayer(contentsOf: url)
+                    audioManager.player?.play()
+                } catch {
+                    print("プレビュー再生エラー: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // デフォルト音 (SystemSound)
+             AudioServicesPlaySystemSound(1007)
+        }
     }
 
     private func openSettings() {
@@ -909,42 +930,64 @@ struct ContentView: View {
                 DispatchQueue.main.async { self.showSoundOffAlert = true }
             }
             removeTimeSignalNotifications {
-                for minute in selectedMinutes {
+                // 通知数制限チェック (iOS制限: 64個まで)
+                // 選択された分数 * 24時間 = 必要総数
+                // 制限を超える場合は、先頭から順に64個までスケジュールする (それ以降の時間は鳴らなくなる)
+                
+                let maxNotifications = 64
+                let cal = Calendar.current
+                let now = Date()
+                let currentHour = cal.component(.hour, from: now)
+                let currentMinute = cal.component(.minute, from: now)
+                let currentTotalMinutes = currentHour * 60 + currentMinute
+                
+                // 全ての候補時間を生成 (24時間 x 選択された分)
+                var allTriggers: [(hour: Int, minute: Int, distance: Int)] = []
+                
+                for hour in 0..<24 {
+                    for minute in selectedMinutes {
+                        let triggerTotalMinutes = hour * 60 + minute
+                        // 現在時刻からの差分（分）を計算。過去の場合は翌日の分として計算 (+1440)
+                        let distance = (triggerTotalMinutes - currentTotalMinutes + 1440) % 1440
+                        allTriggers.append((hour, minute, distance))
+                    }
+                }
+                
+                // 現在時刻に近い順にソートして、上位64個を取得
+                let triggersToSchedule = allTriggers
+                    .sorted { $0.distance < $1.distance }
+                    .prefix(maxNotifications)
+                
+                for t in triggersToSchedule {
                     var components = DateComponents()
-                    components.minute = minute
+                    components.hour = t.hour
+                    components.minute = t.minute
                     components.second = 0
+                    
+                    // 毎日その時間に鳴る
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
                     let content = UNMutableNotificationContent()
                     
-                    // タイトル・本文の制御（ユーザー要望: Time Signalなどの文字を消す）
-                    // バナーOFFの場合は空にしてみる（OS挙動依存）
                     if notifyConfig.isNotificationEnabled {
-                        content.title = "" // タイトル空
-                        content.body = ""  // 本文空（システムがアプリアイコンと時間を表示するはず）
+                        let timeStr = String(format: "%02d:%02d", t.hour, t.minute)
+                        content.title = languageCode == "ja" ? "時報" : "Time Signal"
+                        content.body = languageCode == "ja" ? "\(timeStr) になりました" : "It is \(timeStr)"
                     } else {
-                        // バナーOFFでも音を鳴らすために空通知を送るが、OS仕様でバナーが出る可能性あり
-                        // .badge = 0 等を設定
-                        content.title = ""
-                        content.body = "" 
-                    }
-                    // 振動
-                    if notifyConfig.isVibrationEnabled {
-                        // AudioServicesPlaySystemSound(kSystemSoundID_Vibrate) は古いAPIでシミュレータ等で反応しないことがある
-                        // Haptic Feedbackを使用する (iPhone 7以降)
-                        let generator = UINotificationFeedbackGenerator()
-                        generator.notificationOccurred(.success) 
+                        // サウンドのみの場合でも空文字で設定
+                        content.title = " " // 空白を入れて抑制回避を試みる
+                        content.body = " "
                     }
                     
                     if notifyConfig.isSoundEnabled {
                         content.sound = currentNotificationSound()
                     } else {
-                        // サウンドなし
                         content.sound = nil
                     }
                     
                     content.categoryIdentifier = "TimeSignalCategory"
                     if #available(iOS 15.0, *) { content.interruptionLevel = .timeSensitive }
-                    let identifier = "TimeSignalNotification_EveryHour_\(minute)"
+                    
+                    let identifier = "TimeSignalNotification_h\(t.hour)_m\(t.minute)"
                     let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
                     center.add(request)
                 }
@@ -1063,6 +1106,13 @@ struct ContentView: View {
             }
         }
     }
+}
+
+
+
+// オーディオ管理用クラス (Viewの再描画を避けるため)
+class AudioManager {
+    var player: AVAudioPlayer?
 }
 
 
