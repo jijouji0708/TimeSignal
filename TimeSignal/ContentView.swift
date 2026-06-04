@@ -8,8 +8,10 @@ import AVFoundation
 struct ContentView: View {
     // 状態保存
     @AppStorage("isOn") private var isOn: Bool = false
-    @AppStorage("selectedSoundName") private var selectedSoundName: String = "デフォルト"
-    @AppStorage("languageCode") private var languageCode: String = "ja"
+    // soundOptions の name と一致させる（"デフォルト" だと Picker が空表示になる）
+    @AppStorage("selectedSoundName") private var selectedSoundName: String = "Default"
+    // 端末言語に応じた初期値（"ja" 以外は "en" にフォールバック）
+    @AppStorage("languageCode") private var languageCode: String = Self.defaultLanguageCode()
     @AppStorage("selectedColorName") private var selectedColorName: String = "Cyan"
     @AppStorage("dateFormat") private var dateFormat: String = "MM/dd"
     @AppStorage("dayFormat") private var dayFormat: String = "(E)"
@@ -30,7 +32,8 @@ struct ContentView: View {
     }
     
     struct NotificationConfig: Codable {
-        var isNotificationEnabled: Bool = true // バナー通知
+        // バナーON/OFFはiOS仕様上アプリから切替不可のため廃止。
+        // OS側「設定 > 通知 > シンプル時報」で制御する。
         var isSoundEnabled: Bool = true
         var isFlashEnabled: Bool = false    // 画面フラッシュ（アプリ起動時のみ有効）
     }
@@ -52,7 +55,9 @@ struct ContentView: View {
     @State private var missingSoundName: String = ""
     @State private var isFlashing: Bool = false // フラッシュ用
 
-    
+    // system 外観モード時にシステム配色を反映するために監視
+    @Environment(\.colorScheme) private var systemColorScheme
+
     // 現在時刻（時計用）
     @State private var currentTime = Date()
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -67,9 +72,15 @@ struct ContentView: View {
 
     struct SoundOption: Hashable { let name: String; let fileName: String? }
     private let soundOptions: [SoundOption] = [
-        .init(name: "Default", fileName: nil),
-        .init(name: "Bell", fileName: "bell.caf"),
-        .init(name: "Chime", fileName: "chime.caf")
+        .init(name: "Default",     fileName: nil),
+        .init(name: "Time Signal", fileName: "time_signal.caf"), // ピッピッピッポーン（NHK時報スペック準拠 sin波生成・5秒・著作権フリー）
+        .init(name: "High Beep",   fileName: "beep_hi.caf"),     // 高音ビープ
+        .init(name: "Low Beep",    fileName: "beep_lo.caf"),     // 低音ビープ
+        .init(name: "Melody",      fileName: "melody.caf"),      // ドミソド上昇
+        .init(name: "Tuning Bell", fileName: "tuning_bell.caf"), // 音叉ベル
+        .init(name: "Bird",        fileName: "bird.caf"),        // 鳥さえずり
+        .init(name: "Bell",        fileName: "bell.caf"),
+        .init(name: "Chime",       fileName: "chime.caf")
     ]
     
     struct BulkCategory: Identifiable {
@@ -124,8 +135,6 @@ struct ContentView: View {
         case "My Sets": return isJa ? "マイセット" : "My Sets"
         case "Save Current": return isJa ? "現在の設定を保存" : "Save Current Selection"
         case "Notification Options": return isJa ? "通知オプション" : "Notification Options"
-        case "Show Banner": return isJa ? "バナー通知" : "Show Banner"
-        case "Play Sound": return isJa ? "サウンド再生" : "Play Sound"
         case "Play Sound": return isJa ? "サウンド再生" : "Play Sound"
         // case "Vibration": 削除
         case "Screen Flash": return isJa ? "画面フラッシュ(起動時)" : "Screen Flash (In-App)"
@@ -140,15 +149,38 @@ struct ContentView: View {
         
         // Sounds
         case "Default": return isJa ? "デフォルト" : "Default"
+        case "Time Signal": return isJa ? "時報 (ピッピッピッポーン)" : "Time Signal"
+        case "High Beep":   return isJa ? "高音ビープ" : "High Beep"
+        case "Low Beep":    return isJa ? "低音ビープ" : "Low Beep"
+        case "Melody":      return isJa ? "メロディ" : "Melody"
+        case "Tuning Bell": return isJa ? "音叉ベル" : "Tuning Bell"
+        case "Bird":        return isJa ? "鳥のさえずり" : "Bird"
         case "Bell": return isJa ? "ベル" : "Bell"
         case "Chime": return isJa ? "チャイム" : "Chime"
         
         // My Sets
         case "Set Name": return isJa ? "セット名" : "Set Name"
         case "Load": return isJa ? "読み込み" : "Load"
-        
+        case "Set Default Name": return isJa ? "セット" : "Set"
+
+        // Quick select / All
+        case "Select All": return isJa ? "全選択" : "Select All"
+        case "Deselect All": return isJa ? "全解除" : "Deselect All"
+
+        // 64件制限
+        case "Schedule Limit Warning":
+            return isJa
+                ? "iOSの制約により、現在時刻に近い64件のみ通知されます。"
+                : "Due to iOS limits, only the next 64 notifications will be scheduled."
+
         default: return key
         }
+    }
+
+    // 端末言語からデフォルト言語コードを推定（ja / en）
+    private static func defaultLanguageCode() -> String {
+        let preferred = Locale.preferredLanguages.first ?? "en"
+        return preferred.hasPrefix("ja") ? "ja" : "en"
     }
 
     // MARK: - Body
@@ -218,7 +250,7 @@ struct ContentView: View {
             .onChange(of: isAlwaysOnEnabled) { enabled in
                 UIApplication.shared.isIdleTimerDisabled = enabled
             }
-            .preferredColorScheme(resolvedColorScheme)
+            .preferredColorScheme(preferredColorSchemeValue)
             .onReceive(timer) { input in
                 currentTime = input
                 checkFlash(date: input)
@@ -551,9 +583,14 @@ struct ContentView: View {
         .zIndex(10)
     }
     
+    // 1日に必要な通知数（選択分 × 24時間）。64件のiOS制限超過チェック用
+    private var scheduledNotificationsPerDay: Int {
+        selectedMinutes.count * 24
+    }
+
     private var bottomControlView: some View {
-        VStack(spacing: 15) {
-            
+        VStack(spacing: 10) {
+
             // プリセットボタン + 全解除ボタン
             LazyVGrid(columns: [
                 GridItem(.flexible()), 
@@ -591,7 +628,7 @@ struct ContentView: View {
                     saveSelectedMinutes()
                     scheduleNotificationsDebounced()
                 } label: {
-                    Text(selectedMinutes.isEmpty ? "全選択" : "全解除")
+                    Text(selectedMinutes.isEmpty ? t("Select All") : t("Deselect All"))
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(selectedMinutes.isEmpty ? accentColor : .red.opacity(0.8)) // 全選択時はテーマカラー
                         .padding(.vertical, 12)
@@ -692,11 +729,9 @@ struct ContentView: View {
                 }
                 
                 Section(header: Text(t("Notification Options"))) {
-                    Toggle(t("Show Banner"), isOn: $notifyConfig.isNotificationEnabled)
                     Toggle(t("Play Sound"), isOn: $notifyConfig.isSoundEnabled)
                     Toggle(t("Screen Flash"), isOn: $notifyConfig.isFlashEnabled)
                 }
-                .onChange(of: notifyConfig.isNotificationEnabled) { _ in saveConfig(); scheduleNotificationsDebounced() }
                 .onChange(of: notifyConfig.isSoundEnabled) { _ in saveConfig(); scheduleNotificationsDebounced() }
                 .onChange(of: notifyConfig.isFlashEnabled) { _ in saveConfig() } // 通知スケジュールには影響しない
                 
@@ -773,7 +808,16 @@ struct ContentView: View {
         switch appearanceMode {
         case "light": return .light
         case "dark": return .dark
-        default: return .dark // デフォルトはダーク、システム設定に追従させたい場合は Environment から取るが必要
+        default: return systemColorScheme // system: 端末設定に追従
+        }
+    }
+
+    // preferredColorScheme に渡す値（system のときは nil で OS 任せ）
+    private var preferredColorSchemeValue: ColorScheme? {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
         }
     }
     
@@ -890,11 +934,12 @@ struct ContentView: View {
             if parts.count == 2,
                let url = Bundle.main.url(forResource: String(parts[0]), withExtension: String(parts[1])) {
                 do {
-                    // 他の音を止めて再生
-                    try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
-                    try AVAudioSession.sharedInstance().setActive(true)
-                    
+                    // サイレントスイッチON時でも鳴らすため .playback、他アプリ音は中断しないよう mixWithOthers
+                    try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                    try AVAudioSession.sharedInstance().setActive(true, options: [])
+
                     audioManager.player = try AVAudioPlayer(contentsOf: url)
+                    audioManager.player?.prepareToPlay()
                     audioManager.player?.play()
                 } catch {
                     print("プレビュー再生エラー: \(error.localizedDescription)")
@@ -926,7 +971,8 @@ struct ContentView: View {
             var authorized = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
             if #available(iOS 14.0, *) { authorized = authorized || settings.authorizationStatus == .ephemeral }
             guard authorized else { return }
-            if settings.soundSetting != .enabled {
+            // ユーザーが「サウンド再生」をONにしているのにOSのサウンド許可がOFFの場合だけ案内
+            if self.notifyConfig.isSoundEnabled && settings.soundSetting != .enabled {
                 DispatchQueue.main.async { self.showSoundOffAlert = true }
             }
             removeTimeSignalNotifications {
@@ -958,25 +1004,35 @@ struct ContentView: View {
                     .sorted { $0.distance < $1.distance }
                     .prefix(maxNotifications)
                 
+                // 「Time Signal」（NHK時報スペック）はポーン音が3秒目に来るため、
+                // 指定時刻ちょうどにポーンが鳴るよう通知配信を3秒前にシフトする。
+                let currentSoundFile = self.soundOptions.first(where: { $0.name == self.selectedSoundName })?.fileName
+                let needsPongAlignment = self.notifyConfig.isSoundEnabled && currentSoundFile == "time_signal.caf"
+                let shiftSeconds = needsPongAlignment ? 3 : 0
+
                 for t in triggersToSchedule {
                     var components = DateComponents()
-                    components.hour = t.hour
-                    components.minute = t.minute
-                    components.second = 0
-                    
+                    if shiftSeconds > 0 {
+                        // 3秒前にシフト（00:00:00 の場合は前日 23:59:57）
+                        let targetTotalSec = (t.hour * 60 + t.minute) * 60
+                        let shiftedTotalSec = (targetTotalSec - shiftSeconds + 86400) % 86400
+                        components.hour = shiftedTotalSec / 3600
+                        components.minute = (shiftedTotalSec % 3600) / 60
+                        components.second = shiftedTotalSec % 60
+                    } else {
+                        components.hour = t.hour
+                        components.minute = t.minute
+                        components.second = 0
+                    }
+
                     // 毎日その時間に鳴る
                     let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
                     let content = UNMutableNotificationContent()
                     
-                    if notifyConfig.isNotificationEnabled {
-                        let timeStr = String(format: "%02d:%02d", t.hour, t.minute)
-                        content.title = languageCode == "ja" ? "時報" : "Time Signal"
-                        content.body = languageCode == "ja" ? "\(timeStr) になりました" : "It is \(timeStr)"
-                    } else {
-                        // サウンドのみの場合でも空文字で設定
-                        content.title = " " // 空白を入れて抑制回避を試みる
-                        content.body = " "
-                    }
+                    // 時刻文字列。iOSの仕様上バナーは必ず出るので、常に内容を入れて空白バナーを避ける
+                    let timeStr = String(format: "%02d:%02d", t.hour, t.minute)
+                    content.title = languageCode == "ja" ? "時報" : "Time Signal"
+                    content.body = languageCode == "ja" ? "\(timeStr) になりました" : "It is \(timeStr)"
                     
                     if notifyConfig.isSoundEnabled {
                         content.sound = currentNotificationSound()
@@ -1035,7 +1091,7 @@ struct ContentView: View {
     }
     
     private func saveCurrentAsSet() {
-        let newSet = TimeSignalSet(name: "Set \(savedSets.count + 1)", minutes: selectedMinutes)
+        let newSet = TimeSignalSet(name: "\(t("Set Default Name")) \(savedSets.count + 1)", minutes: selectedMinutes)
         savedSets.append(newSet)
         saveMySets()
     }
@@ -1070,10 +1126,10 @@ struct ContentView: View {
                         }
                     }
                 } else if settings.authorizationStatus == .denied {
+                    // 通知が拒否されているとONにしても何も鳴らない → OFFのまま設定画面へ誘導
                     DispatchQueue.main.async {
-                        withAnimation(.spring()) { self.isOn = true }
-                        self.scheduleNotifications()
-                         self.showSoundOffAlert = true
+                        self.isOn = false
+                        self.showSoundOffAlert = true
                     }
                 } else {
                     // 許可済み

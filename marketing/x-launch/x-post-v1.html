@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<title>シンプル時報 — X 告知 v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* シンプル時報の世界観：紫グラデダーク基調 */
+    --bg-1:#1A1138;
+    --bg-2:#2E1A5E;
+    --bg-3:#3F2580;
+    --ink:#FFFFFF;
+    --ink-2:rgba(255,255,255,.78);
+    --ink-3:rgba(255,255,255,.55);
+    --accent:#5BD8F0;
+    --accent-deep:#2EC0DC;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{background:#0C0820;display:flex;flex-direction:column;gap:48px;padding:48px;align-items:center;font-family:"Noto Sans JP",sans-serif;color:var(--ink)}
+
+  .post{
+    width:1200px;height:675px;position:relative;overflow:hidden;
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(91,216,240,.10), transparent 55%),
+      radial-gradient(ellipse at 85% 80%, rgba(120,90,255,.18), transparent 55%),
+      linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 60%, var(--bg-3) 100%);
+    display:grid;grid-template-columns:1.05fr 0.95fr;
+    box-shadow:0 30px 70px rgba(0,0,0,.5);
+  }
+  .left{padding:70px 0 70px 80px;display:flex;flex-direction:column;justify-content:center;gap:18px}
+  .right{display:flex;align-items:center;justify-content:center;padding:50px 70px 50px 0;position:relative}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:10px;
+    background:rgba(91,216,240,.12);
+    border:1.5px solid rgba(91,216,240,.40);
+    padding:8px 16px;border-radius:999px;width:fit-content;
+    font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.04em;
+    color:var(--accent);font-weight:500;
+  }
+  .badge .dot{width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 12px var(--accent)}
+
+  h1{
+    font-size:64px;font-weight:900;line-height:1.18;letter-spacing:-.025em;
+    color:var(--ink);margin:8px 0 4px;
+  }
+  h1 em{font-style:normal;color:var(--accent)}
+
+  .sub{
+    font-size:17px;font-weight:700;color:var(--ink);line-height:1.55;letter-spacing:.005em;margin-bottom:6px
+  }
+  .lead{
+    font-size:18px;font-weight:400;color:var(--ink-2);line-height:1.75;max-width:500px;letter-spacing:.005em;
+  }
+
+  .cta{
+    display:inline-flex;align-items:center;gap:10px;margin-top:14px;width:fit-content;
+    background:var(--ink);color:#0E0828;
+    padding:13px 22px;border-radius:14px;
+    font-weight:700;font-size:16px;letter-spacing:.02em;
+    box-shadow:0 8px 24px rgba(91,216,240,.25);
+  }
+  .cta b{color:var(--accent-deep)}
+
+  /* iPhone */
+  .phone{
+    position:relative;
+    width:280px;height:608px;
+    background:#0A0820;border-radius:44px;padding:10px;
+    box-shadow:0 30px 60px rgba(0,0,0,.55), 0 0 80px rgba(91,216,240,.15);
+    transform:rotate(-2deg);
+  }
+  .phone img{
+    width:100%;height:100%;object-fit:cover;object-position:top center;
+    border-radius:34px;display:block;
+  }
+  .phone::before{
+    content:"";position:absolute;top:20px;left:50%;transform:translateX(-50%);
+    width:90px;height:24px;background:#000;border-radius:14px;z-index:2;
+  }
+
+  /* footer label */
+  .name-row{display:flex;align-items:center;gap:10px;margin-top:6px}
+  .name-row .d{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .name-row .app-name{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* g2 用：音波形＋アイコン */
+  .sound-viz{
+    width:520px;display:flex;flex-direction:column;align-items:center;gap:24px;
+  }
+  .sound-row{display:flex;align-items:flex-end;gap:8px;height:140px;width:100%;justify-content:center}
+  .sound-row .bar{
+    width:14px;background:linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
+    border-radius:8px;box-shadow:0 0 16px rgba(91,216,240,.4);
+  }
+  .sound-row .label{
+    font-family:"JetBrains Mono",monospace;font-size:14px;letter-spacing:.06em;color:var(--ink-2);
+  }
+  .time-chip{
+    background:rgba(91,216,240,.10);border:1.5px solid rgba(91,216,240,.35);
+    padding:18px 32px;border-radius:18px;
+    font-family:"JetBrains Mono",monospace;font-size:32px;letter-spacing:.05em;color:var(--ink);font-weight:700;
+  }
+  .time-chip b{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- ========== g1 メイン：指定した時刻に、時報。 ========== -->
+<div class="post" id="g1">
+  <div class="left">
+    <div class="badge"><span class="dot"></span>時報・チャイムアプリ</div>
+    <h1>指定した時刻に、<br><em>時報</em>。</h1>
+    <p class="sub">5分単位で、自分だけのタイムシグナル。</p>
+    <p class="lead">毎時0分・10分ごと・15分ごと・30分ごと。<br>選んだ時刻に、ピッピッピッポーン。</p>
+    <a class="cta">App Storeで <b>無料</b></a>
+    <div class="name-row"><span class="d"></span><span class="app-name">シンプル時報</span></div>
+  </div>
+  <div class="right">
+    <div class="phone"><img src="../shots/home_dark.png" alt=""></div>
+  </div>
+</div>
+
+<!-- ========== g2 新音源：9種の通知音、NHKスタイル時報も。 ========== -->
+<div class="post" id="g2">
+  <div class="left">
+    <div class="badge"><span class="dot"></span>新音源搭載</div>
+    <h1>NHK風の時報音、<br><em>新搭載</em>。</h1>
+    <p class="sub">ピッ・ピッ・ピッ・ポーン。</p>
+    <p class="lead">指定した時刻ちょうどに、ポーン。<br>9種類の通知音から、お好きな音を。</p>
+    <a class="cta">App Storeで <b>無料</b></a>
+    <div class="name-row"><span class="d"></span><span class="app-name">シンプル時報</span></div>
+  </div>
+  <div class="right">
+    <div class="sound-viz">
+      <div class="time-chip">10 : <b>00</b> : 00</div>
+      <div class="sound-row">
+        <div class="bar" style="height:24px"></div>
+        <div class="bar" style="height:24px;margin-left:60px"></div>
+        <div class="bar" style="height:24px;margin-left:60px"></div>
+        <div class="bar" style="height:120px;width:18px;margin-left:60px"></div>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.18em;color:var(--ink-3);text-transform:uppercase">
+        ・ピッ ・ピッ ・ピッ ────── ポーン
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== g3 シンプル設定：分単位で選ぶだけ。 ========== -->
+<div class="post" id="g3">
+  <div class="left">
+    <div class="badge"><span class="dot"></span>カスタマイズ</div>
+    <h1>9種の通知音、<br><em>自分好み</em>に。</h1>
+    <p class="sub">テーマカラー切替・日英2言語対応。</p>
+    <p class="lead">時報・チャイム・ベル・小鳥・メロディなど9種から。<br>使うほど、自分のアプリになっていく。</p>
+    <a class="cta">App Storeで <b>無料</b></a>
+    <div class="name-row"><span class="d"></span><span class="app-name">シンプル時報</span></div>
+  </div>
+  <div class="right">
+    <div class="phone"><img src="../shots/home_dark.png" alt=""></div>
+  </div>
+</div>
+
+</body>
+</html>
